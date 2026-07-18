@@ -106,18 +106,18 @@ def _extract_make_from_breadcrumbs(soup: BeautifulSoup) -> str | None:
 def _extract_hin_from_page(page: Page) -> str | None:
     """Extract HIN from window.__REDUX_STATE__ using Playwright JS evaluation.
 
-    This is much more reliable than regex-parsing HTML scripts, because
-    __REDUX_STATE__ is a live JS object that may be hydrated client-side.
+    The Redux state path is: app.data.hull.hin
     """
     try:
         hin = page.evaluate("""() => {
             try {
                 const state = window.__REDUX_STATE__;
                 if (!state) return null;
-                // Navigate possible structures
-                const boatView = state.boatView || state.listings || state;
-                const boat = boatView.boat || boatView;
-                return boat?.hull?.hin || null;
+                // BoatTrader path: app.data.hull.hin
+                const app = state.app || state;
+                const data = app.data || app;
+                const hull = data.hull || {};
+                return hull.hin || null;
             } catch (e) {
                 return null;
             }
