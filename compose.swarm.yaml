@@ -1,22 +1,11 @@
 version: "3.8"
 
-# OPTIONS FOR IMAGE:
-# 1. QUICK: Build directly on the Swarm node:
-#    docker build -t boat-scraper:latest .
-#    Then use: image: boat-scraper:latest (no registry prefix)
-#    IMPORTANT: Add a placement constraint (see deploy: below) so the
-#    service only runs on the node where you built the image.
-#
-# 2. PROPER: Push to a registry all nodes can reach.
-#    GHCR example (free with GitHub):
-#      docker build -t ghcr.io/securitypedant/boat-scraper:latest .
-#      echo $GITHUB_PAT | docker login ghcr.io -u securitypedant --password-stdin
-#      docker push ghcr.io/securitypedant/boat-scraper:latest
-#    Then use: image: ghcr.io/securitypedant/boat-scraper:latest
+# For local images (built on the node), you MUST pin the service to that
+# node or Swarm will fail to schedule it elsewhere.
+# Set the NODE_HOSTNAME env var in Portainer, or edit this file directly.
 
 services:
   boatscraper:
-    # CHANGE THIS to match where your image lives
     image: boat-scraper:latest
     ports:
       - target: 5000
@@ -39,10 +28,13 @@ services:
       resources:
         limits:
           memory: 2G
-      # Uncomment and set to the hostname of the node where you built the image
+      # IMPORTANT: If you have multiple Swarm nodes, this pins the service
+      # to the node where you ran `docker build`.
+      # 1. Find the hostname:  ssh into the node and run `hostname`
+      # 2. Uncomment the lines below and replace MY-NODE with the actual hostname.
       # placement:
       #   constraints:
-      #     - node.hostname == swarm-node-1
+      #     - node.hostname == MY-NODE
 
 volumes:
   scraper_data:
