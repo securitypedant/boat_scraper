@@ -382,6 +382,8 @@ function buildQueryParams() {
   if (cls) p.set('class', cls);
   const engine = document.getElementById('q-engine').value;
   if (engine) p.set('engine', engine);
+  const hin = document.getElementById('q-hin').value;
+  if (hin) p.set('hin', hin);
   const minLen = document.getElementById('q-min-length').value;
   if (minLen) p.set('min_length', minLen);
   const maxLen = document.getElementById('q-max-length').value;

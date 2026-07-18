@@ -105,6 +105,7 @@ def query_boats():
         make = request.args.get("make")
         boat_class = request.args.get("class")
         engine = request.args.get("engine")
+        hin = request.args.get("hin")
         min_length = request.args.get("min_length", type=int)
         max_length = request.args.get("max_length", type=int)
         has_field = request.args.get("has_field")
@@ -116,6 +117,7 @@ def query_boats():
             make=make,
             boat_class=boat_class,
             engine=engine,
+            hin=hin,
             min_length=min_length,
             max_length=max_length,
             has_field=has_field,
@@ -145,6 +147,9 @@ def query_boats():
         if engine is not None:
             count_sql += " AND engine LIKE ?"
             count_params.append(f"%{engine}%")
+        if hin is not None:
+            count_sql += " AND hin LIKE ?"
+            count_params.append(f"%{hin}%")
         if has_field is not None:
             count_sql += f" AND {has_field} IS NOT NULL"
         if missing_field is not None:

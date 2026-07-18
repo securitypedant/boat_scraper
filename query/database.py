@@ -15,6 +15,7 @@ def build_query(
     make: str | None = None,
     boat_class: str | None = None,
     engine: str | None = None,
+    hin: str | None = None,
     min_length: int | None = None,
     max_length: int | None = None,
     has_field: str | None = None,
@@ -48,6 +49,10 @@ def build_query(
     if engine is not None:
         sql += " AND engine LIKE ?"
         params.append(f"%{engine}%")
+
+    if hin is not None:
+        sql += " AND hin LIKE ?"
+        params.append(f"%{hin}%")
 
     if min_length is not None:
         sql += " AND CAST(REPLACE(REPLACE(length, 'ft', ''), \"'\", '') AS REAL) >= ?"
