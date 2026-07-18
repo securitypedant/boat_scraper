@@ -1,9 +1,21 @@
 version: "3.8"
 
+# OPTIONS FOR IMAGE:
+# 1. QUICK: Build directly on the Swarm node:
+#    docker build -t boat-scraper:latest .
+#    Then use: image: boat-scraper:latest (no registry prefix)
+#
+# 2. PROPER: Push to a registry all nodes can reach.
+#    GHCR example (free with GitHub):
+#      docker build -t ghcr.io/securitypedant/boat-scraper:latest .
+#      echo $GITHUB_PAT | docker login ghcr.io -u securitypedant --password-stdin
+#      docker push ghcr.io/securitypedant/boat-scraper:latest
+#    Then use: image: ghcr.io/securitypedant/boat-scraper:latest
+
 services:
   boatscraper:
-    # Build locally and push to your registry first (see below)
-    image: ${REGISTRY:-localhost:5000}/boat-scraper:latest
+    # CHANGE THIS to match where your image lives
+    image: boat-scraper:latest
     ports:
       - target: 5000
         published: 5050
