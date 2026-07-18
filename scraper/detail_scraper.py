@@ -103,29 +103,29 @@ def _extract_make_from_breadcrumbs(soup: BeautifulSoup) -> str | None:
     return None
 
 
-def _extract_hin_from_redux(soup: BeautifulSoup) -> str | None:
-    """Extract HIN from the Redux state JSON blob embedded in page scripts."""
-    for script in soup.find_all("script"):
-        text = script.string or ""
-        # Look for window.__REDUX_STATE__ assignment
-        match = re.search(r'window\.__REDUX_STATE__\s*=\s*({.+?});', text, re.DOTALL)
-        if not match:
-            match = re.search(r'window\.__REDUX_STATE__\s*=\s*({.+})', text, re.DOTALL)
-        if match:
-            try:
-                data = json.loads(match.group(1))
-                # Navigate: typically boatView.boat.hull.hin or similar paths
-                boat_view = data.get("boatView", data.get("listings", {}))
-                if isinstance(boat_view, dict):
-                    boat = boat_view.get("boat", boat_view)
-                    if isinstance(boat, dict):
-                        hull = boat.get("hull", {})
-                        if isinstance(hull, dict):
-                            hin = hull.get("hin")
-                            if isinstance(hin, str) and hin.strip():
-                                return hin.strip()
-            except (json.JSONDecodeError, AttributeError):
-                continue
+def _extract_hin_from_page(page: Page) -> str | None:
+    """Extract HIN from window.__REDUX_STATE__ using Playwright JS evaluation.
+
+    This is much more reliable than regex-parsing HTML scripts, because
+    __REDUX_STATE__ is a live JS object that may be hydrated client-side.
+    """
+    try:
+        hin = page.evaluate("""() => {
+            try {
+                const state = window.__REDUX_STATE__;
+                if (!state) return null;
+                // Navigate possible structures
+                const boatView = state.boatView || state.listings || state;
+                const boat = boatView.boat || boatView;
+                return boat?.hull?.hin || null;
+            } catch (e) {
+                return null;
+            }
+        }""")
+        if isinstance(hin, str) and hin.strip() and hin.strip() not in ("None", "null"):
+            return hin.strip()
+    except Exception:
+        pass
     return None
 
 
@@ -181,7 +181,7 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         result["make"] = _clean_company(make)
 
     # 1c. Extract HIN from Redux state JSON blob
-    result["hin"] = _extract_hin_from_redux(soup)
+    result["hin"] = _extract_hin_from_page(page)
 
     # 2. Extract specs using BoatTrader DOM
     specs = _extract_specs_boattrader(soup)
