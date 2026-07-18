@@ -5,6 +5,7 @@ const els = {
   uptime: document.getElementById('uptime'),
   lastScraped: document.getElementById('last-scraped'),
   lastAction: document.getElementById('last-action'),
+  version: document.getElementById('version'),
   statTotal: document.getElementById('stat-total'),
   statManufacturers: document.getElementById('stat-manufacturers'),
   statPending: document.getElementById('stat-pending'),
@@ -451,5 +452,15 @@ if (els.btnQuery) els.btnQuery.addEventListener('click', runQuery);
 // Poll status every 2 seconds
 setInterval(updateStatus, 2000);
 updateStatus();
+
+// Fetch version once on load
+(async function fetchVersion() {
+  try {
+    const res = await fetch('/api/version');
+    const data = await res.json();
+    if (els.version) els.version.textContent = 'v' + data.version;
+  } catch (e) { /* ignore */ }
+})();
+
 connectLogs();
 dbg('Dashboard loaded, polling started');

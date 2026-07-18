@@ -3,6 +3,7 @@ import json
 import sqlite3
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
@@ -277,6 +278,16 @@ def download_database():
         as_attachment=True,
         download_name=filename,
     )
+
+
+@app.route("/api/version")
+def get_version():
+    """Return the git commit hash baked into the image."""
+    version_path = Path("/app/.version")
+    version = "unknown"
+    if version_path.exists():
+        version = version_path.read_text().strip()
+    return jsonify({"version": version})
 
 
 if __name__ == "__main__":

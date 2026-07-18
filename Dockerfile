@@ -2,6 +2,10 @@ FROM python:3.12-slim-bookworm
 
 WORKDIR /app
 
+# Bake version from build arg
+ARG GIT_COMMIT=unknown
+RUN echo "${GIT_COMMIT}" > /app/.version
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
