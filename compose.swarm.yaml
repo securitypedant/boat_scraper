@@ -1,0 +1,31 @@
+version: "3.8"
+
+services:
+  boatscraper:
+    # Build locally and push to your registry first (see below)
+    image: ${REGISTRY:-localhost:5000}/boat-scraper:latest
+    ports:
+      - target: 5000
+        published: 5050
+        protocol: tcp
+        mode: host
+    volumes:
+      - scraper_data:/app/data
+    environment:
+      - BOAT_SCRAPER_HEADLESS=true
+      - BOAT_SCRAPER_MIN_DELAY=2.0
+      - BOAT_SCRAPER_MAX_DELAY=8.0
+      - BOAT_SCRAPER_MAX_ATTEMPTS=3
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        delay: 10s
+        max_attempts: 3
+      resources:
+        limits:
+          memory: 2G
+
+volumes:
+  scraper_data:
+    driver: local
