@@ -4,6 +4,8 @@ version: "3.8"
 # 1. QUICK: Build directly on the Swarm node:
 #    docker build -t boat-scraper:latest .
 #    Then use: image: boat-scraper:latest (no registry prefix)
+#    IMPORTANT: Add a placement constraint (see deploy: below) so the
+#    service only runs on the node where you built the image.
 #
 # 2. PROPER: Push to a registry all nodes can reach.
 #    GHCR example (free with GitHub):
@@ -37,6 +39,10 @@ services:
       resources:
         limits:
           memory: 2G
+      # Uncomment and set to the hostname of the node where you built the image
+      # placement:
+      #   constraints:
+      #     - node.hostname == swarm-node-1
 
 volumes:
   scraper_data:
