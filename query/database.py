@@ -27,7 +27,7 @@ def build_query(
     sql = """
         SELECT
             id, url, year, name, make, length, class, engine,
-            total_power, engine_hours, model, capacity, scraped_at
+            total_power, engine_hours, model, capacity, hin, scraped_at
         FROM boats
         WHERE 1=1
     """
@@ -67,7 +67,7 @@ def build_query(
         # Basic sanitization: only allow known columns
         allowed_cols = {
             "id", "url", "year", "name", "make", "length", "class", "engine",
-            "total_power", "engine_hours", "model", "capacity", "scraped_at",
+            "total_power", "engine_hours", "model", "capacity", "hin", "scraped_at",
         }
         parts = order_by.split()
         col = parts[0]

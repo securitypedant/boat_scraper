@@ -312,6 +312,7 @@ async function openEditModal(boatId) {
     document.getElementById('edit-engine_hours').value = boat.engine_hours ?? '';
     document.getElementById('edit-model').value = boat.model ?? '';
     document.getElementById('edit-capacity').value = boat.capacity ?? '';
+    document.getElementById('edit-hin').value = boat.hin ?? '';
 
     editStatus.textContent = '';
     modal.classList.add('active');
@@ -329,7 +330,7 @@ modal.addEventListener('click', (e) => {
 btnSaveEdit.addEventListener('click', async () => {
   const boatId = document.getElementById('edit-id').value;
   const body = {};
-  const fields = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity'];
+  const fields = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin'];
   for (const f of fields) {
     const el = document.getElementById('edit-' + f);
     if (el) body[f] = el.value === '' ? null : el.value;
@@ -401,9 +402,9 @@ function renderResults(data) {
     return;
   }
 
-  const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity'];
+  const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin'];
   let html = '<table><thead><tr>';
-  html += '<th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Model</th><th>Capacity</th><th style="text-align:center;width:80px;">Actions</th>';
+  html += '<th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Model</th><th>Capacity</th><th>HIN</th><th style="text-align:center;width:80px;">Actions</th>';
   html += '</tr></thead><tbody>';
 
   for (const row of data.rows) {

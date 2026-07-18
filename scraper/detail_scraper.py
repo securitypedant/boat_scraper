@@ -103,6 +103,32 @@ def _extract_make_from_breadcrumbs(soup: BeautifulSoup) -> str | None:
     return None
 
 
+def _extract_hin_from_redux(soup: BeautifulSoup) -> str | None:
+    """Extract HIN from the Redux state JSON blob embedded in page scripts."""
+    for script in soup.find_all("script"):
+        text = script.string or ""
+        # Look for window.__REDUX_STATE__ assignment
+        match = re.search(r'window\.__REDUX_STATE__\s*=\s*({.+?});', text, re.DOTALL)
+        if not match:
+            match = re.search(r'window\.__REDUX_STATE__\s*=\s*({.+})', text, re.DOTALL)
+        if match:
+            try:
+                data = json.loads(match.group(1))
+                # Navigate: typically boatView.boat.hull.hin or similar paths
+                boat_view = data.get("boatView", data.get("listings", {}))
+                if isinstance(boat_view, dict):
+                    boat = boat_view.get("boat", boat_view)
+                    if isinstance(boat, dict):
+                        hull = boat.get("hull", {})
+                        if isinstance(hull, dict):
+                            hin = hull.get("hin")
+                            if isinstance(hin, str) and hin.strip():
+                                return hin.strip()
+            except (json.JSONDecodeError, AttributeError):
+                continue
+    return None
+
+
 def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
     """Scrape a single boat listing page.
 
@@ -138,6 +164,7 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         "engine_hours": None,
         "model": None,
         "capacity": None,
+        "hin": None,
     }
 
     # 1. Extract from title / headings
@@ -152,6 +179,9 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         make = lookup_make(result["name"])
     if make:
         result["make"] = _clean_company(make)
+
+    # 1c. Extract HIN from Redux state JSON blob
+    result["hin"] = _extract_hin_from_redux(soup)
 
     # 2. Extract specs using BoatTrader DOM
     specs = _extract_specs_boattrader(soup)

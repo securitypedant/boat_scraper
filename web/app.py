@@ -187,7 +187,7 @@ def update_boat(boat_id: int):
     data = request.get_json(silent=True) or {}
     allowed = {
         "year", "name", "make", "length", "class", "engine",
-        "total_power", "engine_hours", "model", "capacity",
+        "total_power", "engine_hours", "model", "capacity", "hin",
     }
     fields = {k: v for k, v in data.items() if k in allowed}
     if not fields:

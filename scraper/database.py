@@ -46,6 +46,11 @@ MIGRATIONS = [
     ALTER TABLE boats ADD COLUMN make TEXT;
     CREATE INDEX IF NOT EXISTS idx_make ON boats(make);
     """,
+    # Migration 3: Add HIN column
+    """
+    ALTER TABLE boats ADD COLUMN hin TEXT;
+    CREATE INDEX IF NOT EXISTS idx_hin ON boats(hin);
+    """,
 ]
 
 
