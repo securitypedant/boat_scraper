@@ -165,6 +165,7 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         "model": None,
         "capacity": None,
         "hin": None,
+        "source": "BoatTrader",
     }
 
     # 1. Extract from title / headings

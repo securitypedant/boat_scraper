@@ -17,6 +17,7 @@ const els = {
   btnPrescrape: document.getElementById('btn-prescrape'),
   btnWipe: document.getElementById('btn-wipe'),
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
+  btnBackfill: document.getElementById('btn-backfill'),
   btnDownload: document.getElementById('btn-download'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
@@ -281,6 +282,24 @@ els.btnWipeMfrs.addEventListener('click', async () => {
   }
 });
 
+els.btnBackfill.addEventListener('click', async () => {
+  if (!confirm('Backfill Source?\n\nThis will set source="BoatTrader" on all existing records that don\'t have one.\n\nProceed?')) return;
+  els.btnBackfill.disabled = true;
+  setLastAction('Backfilling source…');
+  try {
+    const res = await fetch('/api/backfill-source', { method: 'POST' });
+    const data = await res.json();
+    dbg('backfill response: ' + JSON.stringify(data));
+    if (data.success) {
+      showToast(`Backfilled ${data.updated} records. Total BoatTrader: ${data.total}.`);
+      setLastAction('Backfill complete');
+      updateStatus();
+    }
+  } catch (e) {
+    uiErr('POST /api/backfill-source failed: ' + e.message);
+  }
+});
+
 els.btnDownload.addEventListener('click', () => {
   setLastAction('Downloading database…');
   const a = document.createElement('a');
@@ -314,6 +333,7 @@ async function openEditModal(boatId) {
     document.getElementById('edit-model').value = boat.model ?? '';
     document.getElementById('edit-capacity').value = boat.capacity ?? '';
     document.getElementById('edit-hin').value = boat.hin ?? '';
+    document.getElementById('edit-source').value = boat.source || 'BoatTrader';
 
     editStatus.textContent = '';
     modal.classList.add('active');
@@ -331,7 +351,7 @@ modal.addEventListener('click', (e) => {
 btnSaveEdit.addEventListener('click', async () => {
   const boatId = document.getElementById('edit-id').value;
   const body = {};
-  const fields = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin'];
+  const fields = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin','source'];
   for (const f of fields) {
     const el = document.getElementById('edit-' + f);
     if (el) body[f] = el.value === '' ? null : el.value;
@@ -385,6 +405,8 @@ function buildQueryParams() {
   if (engine) p.set('engine', engine);
   const hin = document.getElementById('q-hin').value;
   if (hin) p.set('hin', hin);
+  const source = document.getElementById('q-source').value;
+  if (source) p.set('source', source);
   const minLen = document.getElementById('q-min-length').value;
   if (minLen) p.set('min_length', minLen);
   const maxLen = document.getElementById('q-max-length').value;
@@ -405,9 +427,9 @@ function renderResults(data) {
     return;
   }
 
-  const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin'];
+  const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin','source'];
   let html = '<table><thead><tr>';
-  html += '<th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Model</th><th>Capacity</th><th>HIN</th><th style="text-align:center;width:80px;">Actions</th>';
+  html += '<th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Model</th><th>Capacity</th><th>HIN</th><th>Source</th><th style="text-align:center;width:80px;">Actions</th>';
   html += '</tr></thead><tbody>';
 
   for (const row of data.rows) {

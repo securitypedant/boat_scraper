@@ -16,6 +16,7 @@ def build_query(
     boat_class: str | None = None,
     engine: str | None = None,
     hin: str | None = None,
+    source: str | None = None,
     min_length: int | None = None,
     max_length: int | None = None,
     has_field: str | None = None,
@@ -28,7 +29,7 @@ def build_query(
     sql = """
         SELECT
             id, url, year, name, make, length, class, engine,
-            total_power, engine_hours, model, capacity, hin, scraped_at
+            total_power, engine_hours, model, capacity, hin, source, scraped_at
         FROM boats
         WHERE 1=1
     """
@@ -54,6 +55,10 @@ def build_query(
         sql += " AND hin LIKE ?"
         params.append(f"%{hin}%")
 
+    if source is not None:
+        sql += " AND source = ?"
+        params.append(source)
+
     if min_length is not None:
         sql += " AND CAST(REPLACE(REPLACE(length, 'ft', ''), \"'\", '') AS REAL) >= ?"
         params.append(min_length)
@@ -72,7 +77,7 @@ def build_query(
         # Basic sanitization: only allow known columns
         allowed_cols = {
             "id", "url", "year", "name", "make", "length", "class", "engine",
-            "total_power", "engine_hours", "model", "capacity", "hin", "scraped_at",
+            "total_power", "engine_hours", "model", "capacity", "hin", "source", "scraped_at",
         }
         parts = order_by.split()
         col = parts[0]

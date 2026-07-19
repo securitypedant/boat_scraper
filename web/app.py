@@ -107,6 +107,7 @@ def query_boats():
         boat_class = request.args.get("class")
         engine = request.args.get("engine")
         hin = request.args.get("hin")
+        source = request.args.get("source")
         min_length = request.args.get("min_length", type=int)
         max_length = request.args.get("max_length", type=int)
         has_field = request.args.get("has_field")
@@ -119,6 +120,7 @@ def query_boats():
             boat_class=boat_class,
             engine=engine,
             hin=hin,
+            source=source,
             min_length=min_length,
             max_length=max_length,
             has_field=has_field,
@@ -151,6 +153,9 @@ def query_boats():
         if hin is not None:
             count_sql += " AND hin LIKE ?"
             count_params.append(f"%{hin}%")
+        if source is not None:
+            count_sql += " AND source = ?"
+            count_params.append(source)
         if has_field is not None:
             count_sql += f" AND {has_field} IS NOT NULL"
         if missing_field is not None:
@@ -263,6 +268,20 @@ def wipe_manufacturers():
     db.close()
     log_buffer.write(f"[dashboard] Wiped {deleted} manufacturers. Remaining: {remaining}")
     return jsonify({"success": True, "deleted": deleted, "remaining": remaining})
+
+
+@app.route("/api/backfill-source", methods=["POST"])
+def backfill_source():
+    """Backfill source='BoatTrader' for all existing records that have NULL source."""
+    db = get_db()
+    cursor = db.execute("UPDATE boats SET source = 'BoatTrader' WHERE source IS NULL")
+    db.commit()
+    updated = cursor.rowcount
+    cursor = db.execute("SELECT COUNT(*) FROM boats WHERE source = 'BoatTrader'")
+    total = cursor.fetchone()[0]
+    db.close()
+    log_buffer.write(f"[dashboard] Backfilled {updated} records with source='BoatTrader'. Total: {total}")
+    return jsonify({"success": True, "updated": updated, "total": total})
 
 
 @app.route("/api/download")

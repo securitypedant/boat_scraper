@@ -51,6 +51,11 @@ MIGRATIONS = [
     ALTER TABLE boats ADD COLUMN hin TEXT;
     CREATE INDEX IF NOT EXISTS idx_hin ON boats(hin);
     """,
+    # Migration 4: Add source column
+    """
+    ALTER TABLE boats ADD COLUMN source TEXT DEFAULT 'BoatTrader';
+    CREATE INDEX IF NOT EXISTS idx_source ON boats(source);
+    """,
 ]
 
 

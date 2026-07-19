@@ -25,10 +25,14 @@ def _signal_handler(signum, frame):
 
 def _save_result(db, data: dict):
     """Insert or update a boat record."""
+    # Ensure source is set
+    if not data.get("source"):
+        data["source"] = "BoatTrader"
+
     cursor = db.execute(
         """
-        INSERT INTO boats (url, year, name, make, length, class, engine, total_power, engine_hours, model, capacity, hin)
-        VALUES (:url, :year, :name, :make, :length, :class, :engine, :total_power, :engine_hours, :model, :capacity, :hin)
+        INSERT INTO boats (url, year, name, make, length, class, engine, total_power, engine_hours, model, capacity, hin, source)
+        VALUES (:url, :year, :name, :make, :length, :class, :engine, :total_power, :engine_hours, :model, :capacity, :hin, :source)
         ON CONFLICT(url) DO UPDATE SET
             year=excluded.year,
             name=excluded.name,
@@ -41,6 +45,7 @@ def _save_result(db, data: dict):
             model=excluded.model,
             capacity=excluded.capacity,
             hin=excluded.hin,
+            source=excluded.source,
             scraped_at=CURRENT_TIMESTAMP
         """,
         data,
