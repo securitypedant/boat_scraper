@@ -110,7 +110,7 @@ function appendLog(line) {
   div.textContent = line;
   els.logs.appendChild(div);
   els.logs.scrollTop = els.logs.scrollHeight;
-  while (els.logs.children.length > 1000) {
+  while (els.logs.children.length > 100) {
     els.logs.removeChild(els.logs.firstChild);
   }
 }

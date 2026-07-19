@@ -14,7 +14,7 @@ LOG_PATH = DATA_DIR / "boats_scraper.log"
 class LogBuffer:
     """A thread-safe ring buffer that stores the last N log lines."""
 
-    def __init__(self, max_lines: int = 1000):
+    def __init__(self, max_lines: int = 100):
         self._max_lines = max_lines
         self._buffer: deque[str] = deque(maxlen=max_lines)
         self._lock = threading.Lock()
