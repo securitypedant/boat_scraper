@@ -1,6 +1,7 @@
 """Flask web dashboard for boat scraper."""
 import json
 import sqlite3
+import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -20,7 +21,23 @@ manager = ScraperManager(log_buffer)
 
 @app.route("/")
 def dashboard():
-    return render_template("index.html")
+    version = "unknown"
+    # Try Docker image version first
+    vfile = Path("/app/.version")
+    if vfile.exists():
+        version = vfile.read_text().strip()
+    else:
+        # Local dev: try git hash
+        try:
+            version = subprocess.check_output(
+                ["git", "rev-parse", "--short", "HEAD"],
+                cwd=str(Path(__file__).resolve().parent.parent),
+                text=True,
+                stderr=subprocess.DEVNULL,
+            ).strip()
+        except Exception:
+            pass
+    return render_template("index.html", version=version)
 
 
 @app.route("/api/start", methods=["POST"])
