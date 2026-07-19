@@ -111,7 +111,7 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
 
         # Phase 1: Discover URLs using the authenticated browser
         if not retry_failed:
-            discover_urls(page)
+            discover_urls(page, source=source)
         else:
             # Reset failed to pending
             db.execute("UPDATE progress SET status = 'pending' WHERE status = 'failed'")

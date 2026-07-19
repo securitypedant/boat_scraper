@@ -1,16 +1,42 @@
-"""Sitemap discovery and URL extraction via the browser's fetch API.
-
-Since Cloudflare blocks direct HTTP requests for sitemap files, we use the
-already-authenticated Playwright browser page to fetch XML and .gz files.
-"""
+"""Per-site sitemap discovery and URL extraction."""
 import gzip
 import io
 import xml.etree.ElementTree as ET
+from urllib.parse import urlparse
 
 from playwright.sync_api import Page
 
-from scraper.config import SITEMAP_INDEX_URL
 from scraper.database import get_db
+
+# Site-specific sitemap configurations
+# Each entry defines how to discover URLs for a given source.
+# sitemap_filter: substring to look for in sitemap <loc> entries (or None for all)
+SITE_MAPS = {
+    "BoatTrader": {
+        "index_url": "https://www.boattrader.com/sitemap-index-en.xml",
+        "sitemap_filter": "boatdetail",
+        "url_filter": None,  # accept all URLs
+    },
+    "YachtWorld": {
+        "index_url": "https://www.yachtworld.com/sitemap_index.xml",
+        "sitemap_filter": None,
+        "url_filter": "/yacht/",
+    },
+    "BoatsDotCom": {
+        "index_url": "https://www.boats.com/sitemap_index.xml",
+        "sitemap_filter": None,
+        "url_filter": "/boat",
+    },
+}
+
+
+def _domain_for_source(source: str) -> str:
+    """Return the canonical domain for a source."""
+    return {
+        "BoatTrader": "boattrader.com",
+        "YachtWorld": "yachtworld.com",
+        "BoatsDotCom": "boats.com",
+    }.get(source, source.lower())
 
 
 def _fetch_text(page: Page, url: str) -> str:
@@ -48,27 +74,49 @@ def _fetch_sitemap_text(page: Page, url: str) -> str:
     return _fetch_text(page, url)
 
 
-def discover_urls(page: Page) -> list[str]:
-    """Discover boat detail URLs from BoatTrader sitemaps and store them in the DB.
+def discover_urls(page: Page, source: str | None = None) -> list[str]:
+    """Discover boat detail URLs from a site's sitemaps and store them in the DB.
 
     Args:
-        page: An authenticated Playwright page (Cloudflare already passed).
+        page: An authenticated Playwright page.
+        source: Which site's URLs to discover. If None, discovers BoatTrader URLs.
 
     Returns a list of unique listing URLs (may be empty if already populated).
     """
+    if source is None:
+        source = "BoatTrader"
+
+    config = SITE_MAPS.get(source)
+    if not config:
+        print(f"[sitemap] Unknown source '{source}'. Skipping discovery.")
+        return []
+
+    domain = _domain_for_source(source)
     db = get_db()
 
-    # Check if we already have pending URLs
-    cursor = db.execute("SELECT COUNT(*) FROM progress WHERE status = 'pending'")
+    # Check if we already have pending URLs for THIS site
+    cursor = db.execute(
+        "SELECT COUNT(*) FROM progress WHERE status = 'pending' AND url LIKE ?",
+        (f"%{domain}%",)
+    )
     pending_count = cursor.fetchone()[0]
 
     if pending_count > 0:
-        print(f"[sitemap] Found {pending_count} pending URLs already in database. Skipping discovery.")
+        print(f"[sitemap] Found {pending_count} pending {source} URLs already in database. Skipping discovery.")
         db.close()
         return []
 
-    print("[sitemap] Fetching sitemap index...")
-    index_text = _fetch_sitemap_text(page, SITEMAP_INDEX_URL)
+    index_url = config["index_url"]
+    sitemap_filter = config["sitemap_filter"]
+    url_filter = config["url_filter"]
+
+    print(f"[sitemap] Fetching {source} sitemap index: {index_url}...")
+    try:
+        index_text = _fetch_sitemap_text(page, index_url)
+    except Exception as e:
+        print(f"[sitemap] Failed to fetch {source} sitemap index: {e}")
+        db.close()
+        return []
 
     # Parse index XML
     root = ET.fromstring(index_text)
@@ -77,26 +125,30 @@ def discover_urls(page: Page) -> list[str]:
     sitemap_urls = []
     for sm in root.findall("ns:sitemap", ns):
         loc = sm.find("ns:loc", ns)
-        if loc is not None and "boatdetail" in loc.text:
-            sitemap_urls.append(loc.text)
+        if loc is not None and loc.text:
+            loc_text = loc.text.strip()
+            if sitemap_filter is None or sitemap_filter in loc_text:
+                sitemap_urls.append(loc_text)
 
-    print(f"[sitemap] Found {len(sitemap_urls)} boat detail sitemap files.")
+    print(f"[sitemap] Found {len(sitemap_urls)} {source} sitemap files.")
 
     all_urls = set()
-    for sm_url in sitemap_urls:
+    for sm_url in sitemap_urls[:50]:  # cap at 50 sitemap files
         print(f"[sitemap] Fetching {sm_url}...")
         try:
             content = _fetch_sitemap_text(page, sm_url)
             sm_root = ET.fromstring(content)
             for url_elem in sm_root.findall("ns:url", ns):
                 loc = url_elem.find("ns:loc", ns)
-                if loc is not None:
-                    all_urls.add(loc.text.strip())
+                if loc is not None and loc.text:
+                    url = loc.text.strip()
+                    if url_filter is None or url_filter in url:
+                        all_urls.add(url)
         except Exception as e:
             print(f"[sitemap] Warning: Failed to fetch {sm_url}: {e}")
             continue
 
-    print(f"[sitemap] Total unique boat URLs found: {len(all_urls)}")
+    print(f"[sitemap] Total unique {source} URLs found: {len(all_urls)}")
 
     # Insert into database
     cursor = db.cursor()
@@ -115,5 +167,5 @@ def discover_urls(page: Page) -> list[str]:
     db.commit()
     db.close()
 
-    print(f"[sitemap] Inserted {inserted} new URLs into progress queue.")
+    print(f"[sitemap] Inserted {inserted} new {source} URLs into progress queue.")
     return list(all_urls)
