@@ -303,6 +303,21 @@ def backfill_source():
     return jsonify({"success": True, "updated": updated, "total": total})
 
 
+@app.route("/api/retry-failed", methods=["POST"])
+def retry_failed():
+    """Reset all failed URLs to pending for another attempt."""
+    db = get_db()
+    cursor = db.execute("""
+        UPDATE progress SET status = 'pending', attempts = 0, error_msg = NULL
+        WHERE status = 'failed'
+    """)
+    db.commit()
+    reset_count = cursor.rowcount
+    db.close()
+    log_buffer.write(f"[dashboard] Reset {reset_count} failed URLs to pending for retry.")
+    return jsonify({"success": True, "reset_count": reset_count})
+
+
 @app.route("/api/download")
 def download_database():
     """Download the SQLite database file."""

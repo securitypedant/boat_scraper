@@ -18,6 +18,7 @@ const els = {
   btnWipe: document.getElementById('btn-wipe'),
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
   btnBackfill: document.getElementById('btn-backfill'),
+  btnRetry: document.getElementById('btn-retry'),
   btnDownload: document.getElementById('btn-download'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
@@ -314,6 +315,26 @@ els.btnBackfill.addEventListener('click', async () => {
   } finally {
     _backfillRunning = false;
     els.btnBackfill.disabled = false;
+  }
+});
+
+els.btnRetry.addEventListener('click', async () => {
+  if (!confirm('Retry Failed URLs?\n\nThis will reset ALL failed URLs back to pending so they can be scraped again.\n\nProceed?')) return;
+  els.btnRetry.disabled = true;
+  setLastAction('Resetting failed URLs…');
+  try {
+    const res = await fetch('/api/retry-failed', { method: 'POST' });
+    const data = await res.json();
+    dbg('retry response: ' + JSON.stringify(data));
+    if (data.success) {
+      showToast(`Reset ${data.reset_count} failed URLs to pending.`);
+      setLastAction('Failed URLs reset');
+      updateStatus();
+    }
+  } catch (e) {
+    uiErr('POST /api/retry-failed failed: ' + e.message);
+  } finally {
+    els.btnRetry.disabled = false;
   }
 });
 

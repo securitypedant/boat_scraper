@@ -24,11 +24,55 @@ def _signal_handler(signum, frame):
 
 
 def _save_result(db, data: dict):
-    """Insert or update a boat record."""
+    """Insert or update a boat record.
+
+    If a boat with the same URL exists, update it.
+    If a boat with the same HIN exists (but different URL), update that record
+    with the new URL and data (same boat, new listing).
+    """
     # Ensure source is set
     if not data.get("source"):
         data["source"] = "BoatTrader"
 
+    hin = data.get("hin")
+    url = data.get("url")
+
+    # Case 1: URL already exists → update (ON CONFLICT handles this)
+    # Case 2: HIN already exists, different URL → same boat, update existing record
+    if hin:
+        cursor = db.execute(
+            "SELECT id, url FROM boats WHERE hin = ? AND hin IS NOT NULL",
+            (hin,),
+        )
+        row = cursor.fetchone()
+        if row and row[1] != url:
+            # Same boat, new listing URL → update existing record
+            existing_id = row[0]
+            print(f"[run] HIN match: updating boat #{existing_id} with new URL {url}")
+            db.execute(
+                """
+                UPDATE boats SET
+                    url = :url,
+                    year = :year,
+                    name = :name,
+                    make = :make,
+                    length = :length,
+                    class = :class,
+                    engine = :engine,
+                    total_power = :total_power,
+                    engine_hours = :engine_hours,
+                    model = :model,
+                    capacity = :capacity,
+                    source = :source,
+                    scraped_at = CURRENT_TIMESTAMP
+                WHERE id = :id
+                """,
+                {**data, "id": existing_id},
+            )
+            db.commit()
+            return cursor.rowcount
+
+    # Case 3: New URL (and no HIN conflict) → insert, or update if URL exists
     cursor = db.execute(
         """
         INSERT INTO boats (url, year, name, make, length, class, engine, total_power, engine_hours, model, capacity, hin, source)

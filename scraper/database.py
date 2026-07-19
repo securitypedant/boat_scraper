@@ -56,6 +56,20 @@ MIGRATIONS = [
     ALTER TABLE boats ADD COLUMN source TEXT DEFAULT 'BoatTrader';
     CREATE INDEX IF NOT EXISTS idx_source ON boats(source);
     """,
+    # Migration 5: Create sources table to track all URLs ever found
+    """
+    CREATE TABLE IF NOT EXISTS sources (
+        url TEXT PRIMARY KEY,
+        source_site TEXT,
+        first_seen DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_sources_site ON sources(source_site);
+    CREATE INDEX IF NOT EXISTS idx_sources_first_seen ON sources(first_seen);
+
+    -- Add UNIQUE constraint on hin separately (SQLite doesn't support ALTER TABLE ADD CONSTRAINT)
+    -- Instead we'll use it in application logic
+    """,
 ]
 
 

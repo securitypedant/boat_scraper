@@ -150,22 +150,43 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
 
     print(f"[sitemap] Total unique {source} URLs found: {len(all_urls)}")
 
-    # Insert into database
+    # Track in sources table (all URLs ever found) and progress (only new ones)
     cursor = db.cursor()
-    inserted = 0
+    new_urls = 0
+    updated_sources = 0
+    progress_inserted = 0
+
     for url in sorted(all_urls):
         try:
+            # Upsert into sources (track every URL ever seen)
             cursor.execute(
-                "INSERT OR IGNORE INTO progress (url, status) VALUES (?, 'pending')",
-                (url,),
+                """
+                INSERT INTO sources (url, source_site, first_seen, last_seen)
+                VALUES (:url, :site, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+                ON CONFLICT(url) DO UPDATE SET
+                    last_seen = CURRENT_TIMESTAMP,
+                    source_site = excluded.source_site
+                """,
+                {"url": url, "site": source},
             )
             if cursor.rowcount > 0:
-                inserted += 1
+                # Row was newly inserted (not updated)
+                new_urls += 1
+                # Also add to progress queue since it's new
+                cursor.execute(
+                    "INSERT OR IGNORE INTO progress (url, status) VALUES (?, 'pending')",
+                    (url,),
+                )
+                if cursor.rowcount > 0:
+                    progress_inserted += 1
+            else:
+                updated_sources += 1
         except Exception:
             pass
 
     db.commit()
     db.close()
 
-    print(f"[sitemap] Inserted {inserted} new {source} URLs into progress queue.")
+    print(f"[sitemap] {new_urls} brand-new URLs added to queue, {updated_sources} previously known.")
+    print(f"[sitemap] {progress_inserted} new URLs inserted into progress queue.")
     return list(all_urls)
