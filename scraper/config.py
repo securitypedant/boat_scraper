@@ -18,7 +18,7 @@ MIN_DELAY = float(os.environ.get("BOAT_SCRAPER_MIN_DELAY", "2.0"))
 MAX_DELAY = float(os.environ.get("BOAT_SCRAPER_MAX_DELAY", "8.0"))
 
 # Retry settings
-MAX_ATTEMPTS = int(os.environ.get("BOAT_SCRAPER_MAX_ATTEMPTS", "3"))
+MAX_ATTEMPTS = int(os.environ.get("BOAT_SCRAPER_MAX_ATTEMPTS", "5"))
 
 # URLs
 SITEMAP_INDEX_URL = "https://www.boattrader.com/sitemap-index-en.xml"

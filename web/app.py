@@ -10,12 +10,13 @@ from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from query.database import build_query, get_db
 from scraper.config import DB_PATH
-from web.log_buffer import LogBuffer
+from web.log_buffer import LogBuffer, setup_logging
 from web.scraper_manager import ScraperManager
 
 app = Flask(__name__)
 
 log_buffer = LogBuffer()
+logger = setup_logging(log_buffer)
 manager = ScraperManager(log_buffer)
 
 

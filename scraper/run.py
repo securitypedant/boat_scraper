@@ -180,7 +180,9 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
                 if attempts + 1 >= MAX_ATTEMPTS:
                     _update_progress(db, url, "failed", error_str)
                 else:
-                    _update_progress(db, url, "failed", error_str)
+                    # Keep as pending so it gets retried on next run
+                    _update_progress(db, url, "pending", error_str)
+                    print(f"[run] Will retry {url} (attempt {attempts + 1}/{MAX_ATTEMPTS})")
 
             # Progress stats
             if i % stats_interval == 0 or i == len(urls):
