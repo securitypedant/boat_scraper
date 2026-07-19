@@ -165,6 +165,11 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
                 else:
                     _save_result(db, data)
                     _update_progress(db, url, "done")
+                    # Log summary to live dashboard
+                    name = data.get("name", "Unknown")
+                    hin = data.get("hin", "N/A")
+                    source = data.get("source", "BoatTrader")
+                    print(f"[scrape] {source} | {name} | HIN: {hin}")
 
             except Exception as e:
                 error_str = str(e)
