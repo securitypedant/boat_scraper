@@ -46,13 +46,14 @@ def start_scraper():
     data = request.get_json(silent=True) or {}
     limit = data.get("limit")
     retry_failed = data.get("retry_failed", False)
+    source = data.get("source")  # e.g. "BoatTrader", "YachtWorld", "BoatsDotCom"
 
     if limit is not None:
         limit = int(limit)
 
     try:
-        ok = manager.start(limit=limit, retry_failed=retry_failed)
-        log_buffer.write(f"[dashboard] manager.start() returned {ok}")
+        ok = manager.start(limit=limit, retry_failed=retry_failed, source=source)
+        log_buffer.write(f"[dashboard] manager.start() returned {ok}, source={source}")
     except Exception as exc:
         log_buffer.write(f"[dashboard] manager.start() ERROR: {exc}")
         ok = False

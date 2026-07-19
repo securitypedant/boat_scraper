@@ -55,9 +55,9 @@ class ScraperManager:
     def _log(self, msg: str) -> None:
         self.log_buffer.write(f"[manager] {msg}")
 
-    def start(self, limit: int | None = None, retry_failed: bool = False) -> bool:
+    def start(self, limit: int | None = None, retry_failed: bool = False, source: str | None = None) -> bool:
         """Start the boat scraper in a background thread."""
-        self._log(f"start() called: limit={limit} retry_failed={retry_failed}")
+        self._log(f"start() called: limit={limit} retry_failed={retry_failed} source={source}")
         if self.scraper_running:
             self._log("start() rejected: scraper already running")
             return False
@@ -66,7 +66,7 @@ class ScraperManager:
         self._start_time = datetime.now(timezone.utc)
         self._scraper_thread = threading.Thread(
             target=self._run_scraper,
-            args=(limit, retry_failed),
+            args=(limit, retry_failed, source),
             daemon=True,
         )
         self._scraper_thread.start()
@@ -113,7 +113,7 @@ class ScraperManager:
             sys.stdout = old_stdout
             self._log("Stdout restored")
 
-    def _run_scraper(self, limit: int | None, retry_failed: bool) -> None:
+    def _run_scraper(self, limit: int | None, retry_failed: bool, source: str | None) -> None:
         self._log("--- scraper thread started ---")
 
         def run():
@@ -122,6 +122,7 @@ class ScraperManager:
                 limit=limit,
                 retry_failed=retry_failed,
                 stop_event=self._stop_event,
+                source=source,
             )
             self._log("scrape() returned normally")
 

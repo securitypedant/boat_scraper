@@ -45,6 +45,15 @@
     <button id="btn-test" class="btn btn-primary">Test Run (5)</button>
     <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
     <div style="flex:1"></div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="color:var(--muted);font-size:.85rem;">Site:</label>
+      <select id="scrape-source" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:.9rem;cursor:pointer;">
+        <option value="">All Sites</option>
+        <option value="BoatTrader">BoatTrader</option>
+        <option value="YachtWorld">YachtWorld</option>
+        <option value="BoatsDotCom">Boats.com</option>
+      </select>
+    </div>
     <button id="btn-prescrape" class="btn btn-primary">Prescrape Manufacturers</button>
     <button id="btn-wipe" class="btn btn-danger">Wipe Boats</button>
     <button id="btn-wipe-mfrs" class="btn btn-danger">Wipe Manufacturers</button>

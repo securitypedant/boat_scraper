@@ -80,15 +80,24 @@ function showToast(msg, type = 'info') {
 }
 
 // --- SSE Logs ---
+let _activeEvtSource = null;
+
 function connectLogs() {
+  if (_activeEvtSource) {
+    _activeEvtSource.close();
+    _activeEvtSource = null;
+  }
   dbg('Connecting SSE...');
   const evtSource = new EventSource('/api/logs');
+  _activeEvtSource = evtSource;
   evtSource.onmessage = (e) => {
     const data = JSON.parse(e.data);
     if (data.type === 'log') appendLog(data.line);
   };
   evtSource.onerror = () => {
     dbg('SSE error, reconnecting in 3s...');
+    evtSource.close();
+    _activeEvtSource = null;
     setTimeout(connectLogs, 3000);
   };
 }
@@ -177,8 +186,9 @@ els.btnStart.addEventListener('click', async () => {
   dbg('Start Scraping clicked');
   els.btnStart.disabled = true;
   setLastAction('Starting scraper…');
+  const source = document.getElementById('scrape-source').value;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null}) });
     const data = await res.json();
     dbg('start response: ' + JSON.stringify(data));
     if (data.success) {
@@ -195,8 +205,9 @@ els.btnTest.addEventListener('click', async () => {
   dbg('Test Run (5) clicked');
   els.btnTest.disabled = true;
   setLastAction('Starting test run (5 URLs)…');
+  const source = document.getElementById('scrape-source').value;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit:5}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5, source: source || null}) });
     const data = await res.json();
     dbg('test response: ' + JSON.stringify(data));
     if (data.success) {

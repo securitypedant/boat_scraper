@@ -85,7 +85,7 @@ def _get_stats(db) -> dict:
     }
 
 
-def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: threading.Event | None = None):
+def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: threading.Event | None = None, source: str | None = None):
     """Main scraping loop.
 
     Args:
@@ -93,6 +93,7 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
         retry_failed: If True, retry URLs previously marked as failed.
         stop_event: If provided, the scraper will check this event instead of
                     global signal handling. Used for programmatic control.
+        source: If provided, only scrape URLs matching this source domain.
     """
     # Initialize database
     init_db()
@@ -118,20 +119,29 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
             print("[run] Retrying failed URLs...")
 
         # Build pending queue
-        if retry_failed:
-            cursor = db.execute(
-                "SELECT url FROM progress WHERE status = 'pending' ORDER BY RANDOM()"
-            )
-        else:
-            cursor = db.execute(
-                "SELECT url FROM progress WHERE status = 'pending' ORDER BY RANDOM()"
-            )
-
+        cursor = db.execute(
+            "SELECT url FROM progress WHERE status = 'pending' ORDER BY RANDOM()"
+        )
         urls = [row[0] for row in cursor.fetchall()]
 
         if not urls:
             print("[run] No pending URLs to scrape.")
             return
+
+        # Filter by source if specified
+        if source:
+            before = len(urls)
+            source_domain = {
+                "BoatTrader": "boattrader.com",
+                "YachtWorld": "yachtworld.com",
+                "BoatsDotCom": "boats.com",
+            }.get(source)
+            if source_domain:
+                urls = [url for url in urls if source_domain in url.lower()]
+                print(f"[run] Filtered {before} URLs by source='{source}' → {len(urls)} matching")
+            if not urls:
+                print(f"[run] No pending URLs match source='{source}'.")
+                return
 
         if limit is not None:
             urls = urls[:limit]
