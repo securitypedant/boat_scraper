@@ -32,6 +32,7 @@ const prescrapePct = document.getElementById('prescrape-pct');
 const prescrapeLabel = document.getElementById('prescrape-label');
 
 let isRunning = false;
+let _backfillRunning = false;
 
 // Modal elements
 const modal = document.getElementById('edit-modal');
@@ -283,7 +284,9 @@ els.btnWipeMfrs.addEventListener('click', async () => {
 });
 
 els.btnBackfill.addEventListener('click', async () => {
+  if (_backfillRunning) return;
   if (!confirm('Backfill Source?\n\nThis will set source="BoatTrader" on all existing records that don\'t have one.\n\nProceed?')) return;
+  _backfillRunning = true;
   els.btnBackfill.disabled = true;
   setLastAction('Backfilling source…');
   try {
@@ -297,6 +300,9 @@ els.btnBackfill.addEventListener('click', async () => {
     }
   } catch (e) {
     uiErr('POST /api/backfill-source failed: ' + e.message);
+  } finally {
+    _backfillRunning = false;
+    els.btnBackfill.disabled = false;
   }
 });
 
