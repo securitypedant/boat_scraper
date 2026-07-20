@@ -11,7 +11,7 @@ from scraper.browser import BoatBrowser
 from scraper.config import MAX_ATTEMPTS, MIN_DELAY, MAX_DELAY
 from scraper.database import get_db, init_db
 from scraper.detail_scraper import scrape_listing
-from scraper.sitemap import discover_urls
+from scraper.sitemap import discover_urls, SITE_MAPS
 
 
 _running = True
@@ -155,7 +155,12 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
 
         # Phase 1: Discover URLs using the authenticated browser
         if not retry_failed:
-            discover_urls(page, source=source)
+            if source:
+                discover_urls(page, source=source)
+            else:
+                # Discover URLs for all sites
+                for site in SITE_MAPS:
+                    discover_urls(page, source=site)
         else:
             # Reset failed to pending
             db.execute("UPDATE progress SET status = 'pending' WHERE status = 'failed'")
