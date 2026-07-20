@@ -601,6 +601,40 @@ if (elsSitemap.btnDownloadAll) {
   });
 }
 
+// --- Sitemap upload ---
+const sitemapUploadInput = document.getElementById('sitemap-upload');
+const sitemapUploadBtn = document.getElementById('btn-upload-sitemaps');
+const uploadStatus = document.getElementById('upload-status');
+
+if (sitemapUploadInput && sitemapUploadBtn) {
+  sitemapUploadInput.addEventListener('change', async () => {
+    const files = sitemapUploadInput.files;
+    if (!files || files.length === 0) return;
+    sitemapUploadBtn.textContent = 'Uploading…';
+    sitemapUploadBtn.disabled = true;
+    const form = new FormData();
+    for (const f of files) form.append('files', f);
+    try {
+      const res = await fetch('/api/upload-sitemaps', { method: 'POST', body: form });
+      const data = await res.json();
+      if (data.success) {
+        uploadStatus.textContent = `Uploaded ${data.count} file(s)`;
+        uploadStatus.style.display = 'inline';
+        showToast(`Uploaded ${data.count} sitemap file(s)`);
+        setTimeout(() => { uploadStatus.style.display = 'none'; }, 5000);
+      } else {
+        showToast('Upload failed: ' + (data.error || 'Unknown'), 'error');
+      }
+    } catch (e) {
+      uiErr('Upload failed: ' + e.message);
+    } finally {
+      sitemapUploadBtn.textContent = 'Upload Sitemaps';
+      sitemapUploadBtn.disabled = false;
+      sitemapUploadInput.value = '';
+    }
+  });
+}
+
 async function runQuery() {
   els.btnQuery.disabled = true;
   els.queryTotal.textContent = 'Loading…';

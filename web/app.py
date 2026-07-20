@@ -278,6 +278,31 @@ def query_boats():
         return jsonify({"success": False, "error": str(exc)}), 500
 
 
+@app.route("/api/upload-sitemaps", methods=["POST"])
+def upload_sitemaps():
+    """Accept .gz sitemap file uploads and save to /app/data/sitemaps/."""
+    import os
+
+    upload_dir = Path("/app/data/sitemaps")
+    upload_dir.mkdir(parents=True, exist_ok=True)
+
+    files = request.files.getlist("files")
+    if not files:
+        return jsonify({"success": False, "error": "No files provided"}), 400
+
+    saved = []
+    for f in files:
+        if f.filename and f.filename.endswith(".gz"):
+            dest = upload_dir / f.filename
+            f.save(str(dest))
+            saved.append(f.filename)
+        else:
+            log_buffer.write(f"[dashboard] Skipping non-.gz upload: {f.filename}")
+
+    log_buffer.write(f"[dashboard] Uploaded {len(saved)} sitemap files")
+    return jsonify({"success": True, "saved": saved, "count": len(saved)})
+
+
 @app.route("/api/boat/<int:boat_id>")
 def get_boat(boat_id: int):
     """Get a single boat by ID."""
