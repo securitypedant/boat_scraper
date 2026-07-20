@@ -20,6 +20,7 @@ class ScraperManager:
         self._scraper_thread: threading.Thread | None = None
         self._prescraper_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
+        self._stop_requested = False
         self._start_time: datetime | None = None
         self._prescrape_current = 0
         self._prescrape_total = 0
@@ -63,6 +64,7 @@ class ScraperManager:
             return False
 
         self._stop_event.clear()
+        self._stop_requested = False
         self._start_time = datetime.now(timezone.utc)
         self._scraper_thread = threading.Thread(
             target=self._run_scraper,
@@ -79,6 +81,7 @@ class ScraperManager:
         if not self.scraper_running:
             self._log("stop() rejected: scraper not running")
             return False
+        self._stop_requested = True
         self.log_buffer.write("[manager] Stop signal sent...")
         self._stop_event.set()
         return True
@@ -152,6 +155,7 @@ class ScraperManager:
             "running": self.is_running,
             "scraper_running": self.scraper_running,
             "prescraper_running": self.prescraper_running,
+            "stop_requested": self._stop_requested,
             "start_time": self._start_time.isoformat() if self._start_time else None,
             "uptime_seconds": self.uptime_seconds,
         }

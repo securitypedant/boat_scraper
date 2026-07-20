@@ -127,7 +127,12 @@ async function updateStatus() {
     dbg('status: running=' + data.running + ' scraper=' + data.scraper_running + ' prescraper=' + data.prescraper_running);
 
     els.statusDot.className = 'dot ' + (data.running ? 'running' : 'stopped');
-    els.statusText.textContent = data.running ? 'Running' : 'Stopped';
+    if (data.stop_requested && data.scraper_running) {
+      els.statusText.textContent = 'Stopping…';
+      setLastAction('Stop requested, waiting for current page to finish…', 0);
+    } else {
+      els.statusText.textContent = data.running ? 'Running' : 'Stopped';
+    }
 
     els.statTotal.textContent = data.total_boats || 0;
     els.statManufacturers.textContent = data.total_manufacturers || 0;
@@ -223,12 +228,16 @@ els.btnTest.addEventListener('click', async () => {
 
 els.btnStop.addEventListener('click', async () => {
   dbg('Stop clicked');
-  els.btnStop.disabled = true;
   setLastAction('Stopping scraper…');
   try {
     const res = await fetch('/api/stop', { method: 'POST' });
-    dbg('stop response: ' + res.status);
-    showToast('Stop signal sent');
+    const data = await res.json();
+    dbg('stop response: ' + JSON.stringify(data));
+    if (!data.success) {
+      showToast('Scraper not running', 'error');
+    } else {
+      showToast('Stop signal sent');
+    }
   } catch (e) {
     uiErr('POST /api/stop failed: ' + e.message);
   }

@@ -246,10 +246,14 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
                     f"Total queue: done={stats['done']}, pending={stats['pending']}, failed={stats['failed']}"
                 )
 
-            # Rate limiting
+            # Rate limiting — check stop_event every 0.5s so we respond quickly
             if i < len(urls) and not is_stopped():
                 delay = random.uniform(MIN_DELAY, MAX_DELAY)
-                time.sleep(delay)
+                slept = 0.0
+                chunk = 0.5
+                while slept < delay and not is_stopped():
+                    time.sleep(min(chunk, delay - slept))
+                    slept += chunk
 
     stats = _get_stats(db)
     print("\n[run] Scraping complete.")
