@@ -502,6 +502,7 @@ const elsSitemap = {
   list: document.getElementById('sitemap-list'),
   urls: document.getElementById('sitemap-urls'),
   instructions: document.getElementById('sitemap-instructions'),
+  btnDownloadAll: document.getElementById('btn-download-all-sitemaps'),
   btnCopyAll: document.getElementById('btn-copy-all-sitemaps'),
 };
 
@@ -532,10 +533,31 @@ if (elsSitemap.btnShow) {
 
       // Wire up download buttons
       elsSitemap.urls.querySelectorAll('.btn-download-url').forEach(btn => {
-        btn.addEventListener('click', () => {
-          window.open(btn.dataset.url, '_blank');
-          btn.textContent = 'Opened';
-          setTimeout(() => btn.textContent = 'Download', 1500);
+        btn.addEventListener('click', async () => {
+          const url = btn.dataset.url;
+          const filename = btn.dataset.filename;
+          btn.textContent = 'Fetching…';
+          btn.disabled = true;
+          try {
+            // Fetch through browser (has Cloudflare clearance)
+            const resp = await fetch(url, {credentials: 'include', redirect: 'follow'});
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const blob = await resp.blob();
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(blob);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(a.href);
+            btn.textContent = 'Downloaded';
+          } catch (e) {
+            // If CORS blocked it, fall back to opening in new tab
+            window.open(url, '_blank');
+            btn.textContent = 'Opened';
+            showToast('CORS blocked direct download — saved to tab, use Ctrl+S', 'warning');
+          }
+          setTimeout(() => { btn.textContent = 'Download'; btn.disabled = false; }, 2000);
         });
       });
 
@@ -561,6 +583,21 @@ if (elsSitemap.btnCopyAll) {
     navigator.clipboard.writeText(urls);
     elsSitemap.btnCopyAll.textContent = 'Copied!';
     setTimeout(() => elsSitemap.btnCopyAll.textContent = 'Copy All', 1500);
+  });
+}
+
+if (elsSitemap.btnDownloadAll) {
+  elsSitemap.btnDownloadAll.addEventListener('click', async () => {
+    const btns = Array.from(elsSitemap.urls.querySelectorAll('.btn-download-url'));
+    if (btns.length === 0) return;
+    elsSitemap.btnDownloadAll.textContent = 'Downloading…';
+    elsSitemap.btnDownloadAll.disabled = true;
+    for (const btn of btns) {
+      btn.click();
+      await new Promise(r => setTimeout(r, 800)); // stagger to avoid browser blocking
+    }
+    elsSitemap.btnDownloadAll.textContent = 'Downloaded All';
+    setTimeout(() => { elsSitemap.btnDownloadAll.textContent = 'Download All'; elsSitemap.btnDownloadAll.disabled = false; }, 2000);
   });
 }
 
