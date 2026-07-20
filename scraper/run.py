@@ -215,11 +215,35 @@ def scrape(
 
         print(f"[run] Starting scrape of {len(urls)} URLs...")
         stats_interval = max(1, len(urls) // 10)
+        _page_recycle_every = 200
+        _browser_recycle_every = 1500
+        _since_last_recycle = 0
 
         for i, url in enumerate(urls, 1):
             if is_stopped():
                 print("[run] Stopping gracefully...")
                 break
+
+            # Periodically recycle the page to prevent renderer crashes
+            if _since_last_recycle >= _page_recycle_every:
+                print(f"[browser] Recycling page after {_since_last_recycle} scrapes...")
+                page = browser.recycle_page()
+                _since_last_recycle = 0
+                # Re-warm the page for the current domain to keep Cloudflare happy
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                except Exception:
+                    pass
+
+            # Full browser restart every N to prevent process-level leaks
+            if i % _browser_recycle_every == 0:
+                print(f"[browser] Full restart after {i} scrapes...")
+                browser.shutdown()
+                page = browser.start()
+                try:
+                    page.goto(url, wait_until="domcontentloaded", timeout=15000)
+                except Exception:
+                    pass
 
             try:
                 data = scrape_listing(page, url)
@@ -254,6 +278,8 @@ def scrape(
                     # Keep as pending so it gets retried on next run
                     _update_progress(db, url, "pending", error_str)
                     print(f"[run] Will retry {url} (attempt {attempts + 1}/{MAX_ATTEMPTS})")
+
+            _since_last_recycle += 1
 
             # Progress stats
             if i % stats_interval == 0 or i == len(urls):

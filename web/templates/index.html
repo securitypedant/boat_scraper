@@ -40,16 +40,17 @@
 <!-- Controls -->
 <div class="panel">
   <h2>Controls</h2>
-  <div class="controls">
+
+  <!-- Row 1: Main workflow actions -->
+  <div class="controls" style="margin-bottom:8px;">
     <button id="btn-discover" class="btn btn-primary">Pull Index</button>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer;">
-      <input type="checkbox" id="cb-refresh" style="accent-color:var(--accent);">
-      Force re-download
-    </label>
     <button id="btn-start" class="btn btn-primary">Start Scraping</button>
-    <button id="btn-test" class="btn btn-primary">Test Run (5)</button>
     <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
-    <div style="flex:1"></div>
+    <button id="btn-test" class="btn btn-primary">Test Run (5)</button>
+  </div>
+
+  <!-- Row 2: Site selector + options -->
+  <div class="controls" style="margin-bottom:12px;">
     <div style="display:flex;align-items:center;gap:6px;">
       <label style="color:var(--muted);font-size:.85rem;">Site:</label>
       <select id="scrape-source" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:.9rem;cursor:pointer;">
@@ -59,21 +60,27 @@
         <option value="BoatsDotCom">Boats.com</option>
       </select>
     </div>
-    <button id="btn-prescrape" class="btn btn-primary">Prescrape Manufacturers</button>
-    <button id="btn-wipe" class="btn btn-danger">Wipe Boats</button>
-    <button id="btn-wipe-mfrs" class="btn btn-danger">Wipe Manufacturers</button>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer;margin-left:8px;">
+      <input type="checkbox" id="cb-refresh" style="accent-color:var(--accent);">
+      Force re-download
+    </label>
+    <div style="flex:1"></div>
     <button id="btn-retry" class="btn btn-primary">Retry Failed</button>
-    <button id="btn-download" class="btn btn-primary">Download DB</button>
   </div>
-  <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
-    <button id="btn-show-sitemaps" class="btn" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:.85rem;padding:6px 12px;">Show Sitemap URLs</button>
+
+  <!-- Row 3: Sitemap management -->
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+    <span style="color:var(--muted);font-size:.8rem;font-weight:600;">Sitemaps:</span>
+    <button id="btn-show-sitemaps" class="btn" style="background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:.8rem;padding:6px 12px;">Show URLs</button>
     <label style="position:relative;cursor:pointer;">
       <input type="file" id="sitemap-upload" multiple accept=".gz" style="display:none;">
-      <span id="btn-upload-sitemaps" class="btn" style="display:inline-block;background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:.85rem;padding:6px 12px;">Upload Sitemaps</span>
+      <span id="btn-upload-sitemaps" class="btn" style="display:inline-block;background:var(--surface);border:1px solid var(--border);color:var(--muted);font-size:.8rem;padding:6px 12px;">Upload</span>
     </label>
-    <span id="upload-status" style="display:none;color:var(--success);font-size:.85rem;"></span>
-    <span id="sitemap-instructions" style="display:none;color:var(--muted);font-size:.85rem;">Download these files, then click Upload Sitemaps</span>
+    <span id="upload-status" style="display:none;color:var(--success);font-size:.8rem;"></span>
+    <span id="sitemap-instructions" style="display:none;color:var(--muted);font-size:.8rem;margin-left:auto;">Download files, then click Upload</span>
   </div>
+
+  <!-- Sitemap URLs panel -->
   <div id="sitemap-list" style="display:none;margin-top:8px;max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:8px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <strong style="color:var(--text);font-size:.9rem;">Sitemap Files</strong>
@@ -84,6 +91,16 @@
     </div>
     <div id="sitemap-urls"></div>
   </div>
+
+  <!-- Row 4: Maintenance actions -->
+  <div class="controls" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);">
+    <button id="btn-prescrape" class="btn btn-primary">Prescrape Manufacturers</button>
+    <button id="btn-wipe" class="btn btn-danger">Wipe Boats</button>
+    <button id="btn-wipe-mfrs" class="btn btn-danger">Wipe Manufacturers</button>
+    <div style="flex:1"></div>
+    <button id="btn-download" class="btn btn-primary">Download DB</button>
+  </div>
+
   <div id="prescrape-progress" style="display:none;margin-top:12px;">
     <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
       <span style="color:var(--muted);font-size:.8rem;" id="prescrape-label">Fetching manufacturers...</span>

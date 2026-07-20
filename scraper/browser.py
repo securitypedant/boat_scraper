@@ -83,16 +83,31 @@ class BoatBrowser:
 
         if self._is_challenge_page(self.page):
             print("[browser] WARNING: Cloudflare challenge still detected.")
-            print("[browser] The site may require a headed browser session,")
-            print("[browser] or the scraper may need to run from a residential IP.")
             self.shutdown()
             raise RuntimeError(
-                "Cloudflare challenge could not be bypassed automatically. "
-                "Try running from an IP with better reputation, or use a VPN/proxy."
+                "Cloudflare challenge could not be bypassed automatically."
             )
 
         print("[browser] Browser ready.")
         return self.page
+
+    def recycle_page(self) -> Page:
+        """Close current page and open a fresh one (keeps browser/context alive).
+
+        Call this every ~200 scrapes to prevent renderer memory bloat/crashes.
+        """
+        if self.page:
+            try:
+                self.page.close()
+            except Exception:
+                pass
+        if self.context:
+            self.page = self.context.new_page()
+            self.page.set_default_timeout(BROWSER_TIMEOUT)
+            self.page.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
+            return self.page
+        # Fallback — shouldn't happen if browser is already running
+        return self.start()
 
     def shutdown(self) -> None:
         """Cleanly shut down browser and context."""
