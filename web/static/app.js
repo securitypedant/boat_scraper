@@ -522,7 +522,7 @@ if (elsSitemap.btnShow) {
       elsSitemap.urls.innerHTML = data.urls.map(u => {
         const filename = u.split('/').pop();
         return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-family:monospace;font-size:.8rem;">
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${u}">${filename}</span>
+          <a href="${u}" target="_blank" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--accent);text-decoration:none;" title="${u}">${filename}</a>
           <button class="btn-download-url" data-url="${u}" data-filename="${filename}" style="padding:2px 8px;font-size:.75rem;background:var(--success);color:#fff;border:none;border-radius:4px;cursor:pointer;">Download</button>
           <button class="btn-copy-url" data-url="${u}" style="padding:2px 8px;font-size:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;">Copy</button>
         </div>`;
