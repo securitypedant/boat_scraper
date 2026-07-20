@@ -520,6 +520,63 @@ function renderResults(data) {
   els.results.innerHTML = html;
 }
 
+// --- Sitemap URLs ---
+const elsSitemap = {
+  btnShow: document.getElementById('btn-show-sitemaps'),
+  list: document.getElementById('sitemap-list'),
+  urls: document.getElementById('sitemap-urls'),
+  instructions: document.getElementById('sitemap-instructions'),
+  btnCopyAll: document.getElementById('btn-copy-all-sitemaps'),
+};
+
+if (elsSitemap.btnShow) {
+  elsSitemap.btnShow.addEventListener('click', async () => {
+    const source = document.getElementById('scrape-source').value || 'YachtWorld';
+    dbg('Fetching sitemap URLs for ' + source);
+    setLastAction('Loading sitemap URLs…');
+    elsSitemap.btnShow.disabled = true;
+    try {
+      const res = await fetch('/api/sitemap-urls?source=' + encodeURIComponent(source));
+      const data = await res.json();
+      if (data.error) {
+        showToast('Failed: ' + data.error, 'error');
+        return;
+      }
+      elsSitemap.urls.innerHTML = data.urls.map(u =>
+        `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-family:monospace;font-size:.8rem;">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u}</span>
+          <button class="btn-copy-url" data-url="${u}" style="padding:2px 8px;font-size:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;">Copy</button>
+        </div>`
+      ).join('');
+      elsSitemap.list.style.display = 'block';
+      elsSitemap.instructions.style.display = 'inline';
+      showToast(data.count + ' sitemap URLs loaded');
+
+      // Wire up copy buttons
+      elsSitemap.urls.querySelectorAll('.btn-copy-url').forEach(btn => {
+        btn.addEventListener('click', () => {
+          navigator.clipboard.writeText(btn.dataset.url);
+          btn.textContent = 'Copied!';
+          setTimeout(() => btn.textContent = 'Copy', 1500);
+        });
+      });
+    } catch (e) {
+      uiErr('Failed to load sitemap URLs: ' + e.message);
+    } finally {
+      elsSitemap.btnShow.disabled = false;
+    }
+  });
+}
+
+if (elsSitemap.btnCopyAll) {
+  elsSitemap.btnCopyAll.addEventListener('click', () => {
+    const urls = Array.from(elsSitemap.urls.querySelectorAll('.btn-copy-url')).map(b => b.dataset.url).join('\n');
+    navigator.clipboard.writeText(urls);
+    elsSitemap.btnCopyAll.textContent = 'Copied!';
+    setTimeout(() => elsSitemap.btnCopyAll.textContent = 'Copy All', 1500);
+  });
+}
+
 async function runQuery() {
   els.btnQuery.disabled = true;
   els.queryTotal.textContent = 'Loading…';

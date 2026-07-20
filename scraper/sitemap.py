@@ -3,6 +3,7 @@ import gzip
 import io
 import time
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from urllib.parse import urlparse
 
 from playwright.sync_api import Page
@@ -52,17 +53,60 @@ def _fetch_text(page: Page, url: str) -> str:
 
 
 def _fetch_gz(page: Page, url: str) -> str:
-    """Fetch a .gz sitemap using the browser's own request API.
+    """Fetch .gz sitemap. Checks local /app/data/sitemaps/ first."""
+    # --- LOCAL OVERRIDE: check if user uploaded the .gz file ---
+    local_dir = Path("/app/data/sitemaps")
+    filename = Path(urlparse(url).path).name
+    local_path = local_dir / filename
+    if local_path.exists():
+        print(f"[sitemap] Reading local {filename}")
+        with open(local_path, "rb") as f:
+            data = f.read()
+        if data[:2] == b"\x1f\x8b":
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+                return f.read().decode("utf-8")
+        return data.decode("utf-8")
 
-    Playwright's page.evaluate() crashes Chrome when returning multi-MB binary
-    arrays through the JSON wire. page.request.fetch() uses Chrome's native
-    HTTP stack (same TLS fingerprint, same cookies) so Cloudflare stays happy,
-    and returns raw bytes directly in Python without touching the wire.
-    """
-    resp = page.request.fetch(url, timeout=120000)
-    if not resp.ok:
-        raise RuntimeError(f"HTTP {resp.status}: {resp.status_text}")
-    data: bytes = resp.body()
+    # --- REMOTE FETCH: chunked via browser to avoid wire crash ---
+    # Fetch in page, cache as Uint8Array, read back in 1MB base64 chunks
+    chunk_size = 1024 * 1024  # 1MB
+
+    size_info = page.evaluate(
+        """
+        async (url) => {
+            const resp = await fetch(url, { credentials: 'include' });
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const buf = await resp.arrayBuffer();
+            window._gzBuf = new Uint8Array(buf);
+            return { size: window._gzBuf.length };
+        }
+        """,
+        url,
+    )
+    total = size_info["size"]
+
+    try:
+        chunks = []
+        for offset in range(0, total, chunk_size):
+            chunk_b64 = page.evaluate(
+                """
+                ({offset, size}) => {
+                    const slice = window._gzBuf.slice(offset, offset + size);
+                    let binary = '';
+                    for (let i = 0; i < slice.length; i++) {
+                        binary += String.fromCharCode(slice[i]);
+                    }
+                    return btoa(binary);
+                }
+                """,
+                {"offset": offset, "size": min(chunk_size, total - offset)},
+            )
+            chunks.append(base64.b64decode(chunk_b64))
+
+        data = b"".join(chunks)
+    finally:
+        page.evaluate("() => { delete window._gzBuf; }")
+
     if data[:2] == b"\x1f\x8b":
         with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
             return f.read().decode("utf-8")

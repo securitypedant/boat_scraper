@@ -62,6 +62,17 @@
     <button id="btn-retry" class="btn btn-primary">Retry Failed</button>
     <button id="btn-download" class="btn btn-primary">Download DB</button>
   </div>
+  <div style="margin-top:12px;display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button id="btn-show-sitemaps" class="btn" style="background:var(--bg);border:1px solid var(--border);color:var(--muted);font-size:.85rem;padding:6px 12px;">Show Sitemap URLs</button>
+    <span id="sitemap-instructions" style="display:none;color:var(--muted);font-size:.85rem;">Download these files, then upload to <code>/app/data/sitemaps/</code></span>
+  </div>
+  <div id="sitemap-list" style="display:none;margin-top:8px;max-height:300px;overflow:auto;border:1px solid var(--border);border-radius:6px;background:var(--bg);padding:8px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+      <strong style="color:var(--text);font-size:.9rem;">Sitemap Files</strong>
+      <button id="btn-copy-all-sitemaps" class="btn" style="font-size:.8rem;padding:4px 10px;background:var(--accent);color:#fff;border:none;">Copy All</button>
+    </div>
+    <div id="sitemap-urls"></div>
+  </div>
   <div id="prescrape-progress" style="display:none;margin-top:12px;">
     <div style="display:flex;justify-content:space-between;margin-bottom:4px;">
       <span style="color:var(--muted);font-size:.8rem;" id="prescrape-label">Fetching manufacturers...</span>

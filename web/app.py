@@ -5,11 +5,13 @@ import subprocess
 import time
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from query.database import build_query, get_db
 from scraper.config import DB_PATH
+from scraper.sitemap import SITE_MAPS
 from web.log_buffer import LogBuffer, setup_logging
 from web.scraper_manager import ScraperManager
 
@@ -82,6 +84,56 @@ def discover_scraper():
         log_buffer.write(f"[dashboard] manager.discover() ERROR: {exc}")
         ok = False
     return jsonify({"success": ok, "running": manager.discover_running})
+
+
+@app.route("/api/sitemap-urls")
+def sitemap_urls():
+    """Return sitemap file URLs for a source (fetched live from the index)."""
+    source = request.args.get("source", "YachtWorld")
+    cfg = SITE_MAPS.get(source)
+    if not cfg:
+        return jsonify({"error": "Unknown source", "urls": []}), 400
+
+    log_buffer.write(f"[dashboard] GET /api/sitemap-urls source={source}")
+    index_url = cfg["index_url"]
+
+    try:
+        from scraper.browser import BoatBrowser
+        import xml.etree.ElementTree as ET
+
+        with BoatBrowser() as browser:
+            page = browser.page
+            # Visit the site first to warm up session
+            domain = urlparse(index_url).netloc
+            try:
+                page.goto(f"https://{domain}/", wait_until="networkidle", timeout=20000)
+            except Exception:
+                pass
+
+            # Fetch the index XML
+            text = page.evaluate(
+                """async (url) => {
+                    const resp = await fetch(url, { credentials: 'include' });
+                    return await resp.text();
+                }""",
+                index_url,
+            )
+
+            root = ET.fromstring(text)
+            ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
+            sitemap_filter = cfg.get("sitemap_filter")
+            urls = []
+            for sm in root.findall("ns:sitemap", ns):
+                loc = sm.find("ns:loc", ns)
+                if loc is not None and loc.text:
+                    loc_text = loc.text.strip()
+                    if sitemap_filter is None or sitemap_filter in loc_text:
+                        urls.append(loc_text)
+
+        return jsonify({"source": source, "count": len(urls), "urls": urls})
+    except Exception as exc:
+        log_buffer.write(f"[dashboard] sitemap-urls ERROR: {exc}")
+        return jsonify({"error": str(exc), "urls": []}), 500
 
 
 @app.route("/api/prescrape", methods=["POST"])
