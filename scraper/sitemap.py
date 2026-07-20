@@ -52,20 +52,21 @@ def _fetch_text(page: Page, url: str) -> str:
     )
 
 
-def _fetch_gz(page: Page, url: str) -> str:
+def _fetch_gz(page: Page, url: str, refresh: bool = False) -> str:
     """Fetch .gz sitemap. Checks local /app/data/sitemaps/ first."""
     # --- LOCAL OVERRIDE: check if user uploaded the .gz file ---
-    local_dir = Path("/app/data/sitemaps")
-    filename = Path(urlparse(url).path).name
-    local_path = local_dir / filename
-    if local_path.exists():
-        print(f"[sitemap] Reading local {filename}")
-        with open(local_path, "rb") as f:
-            data = f.read()
-        if data[:2] == b"\x1f\x8b":
-            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
-                return f.read().decode("utf-8")
-        return data.decode("utf-8")
+    if not refresh:
+        local_dir = Path("/app/data/sitemaps")
+        filename = Path(urlparse(url).path).name
+        local_path = local_dir / filename
+        if local_path.exists():
+            print(f"[sitemap] Reading local {filename}")
+            with open(local_path, "rb") as f:
+                data = f.read()
+            if data[:2] == b"\x1f\x8b":
+                with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+                    return f.read().decode("utf-8")
+            return data.decode("utf-8")
 
     # --- REMOTE FETCH: chunked via browser to avoid wire crash ---
     # Fetch in page, cache as Uint8Array, read back in 1MB base64 chunks
