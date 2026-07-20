@@ -5,7 +5,6 @@ import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
-import requests
 from playwright.sync_api import Page
 
 from scraper.database import get_db
@@ -53,33 +52,21 @@ def _fetch_text(page: Page, url: str) -> str:
 
 
 def _fetch_gz(page: Page, url: str) -> str:
-    """Fetch a .gz URL via direct HTTP using browser cookies (avoids Playwright wire crash).
+    """Fetch a .gz sitemap using the browser's own request API.
 
-    Playwright's page.evaluate() crashes Chrome when returning multi-MB binary arrays
-    through the JSON wire. We extract the browser's cookies (including Cloudflare
-    clearance) and use requests for the heavy download.
+    Playwright's page.evaluate() crashes Chrome when returning multi-MB binary
+    arrays through the JSON wire. page.request.fetch() uses Chrome's native
+    HTTP stack (same TLS fingerprint, same cookies) so Cloudflare stays happy,
+    and returns raw bytes directly in Python without touching the wire.
     """
-    try:
-        # Build a requests session with the browser's cookies
-        session = requests.Session()
-        for cookie in page.context.cookies():
-            session.cookies.set(cookie["name"], cookie["value"], domain=cookie.get("domain"))
-
-        resp = session.get(url, timeout=90, headers={
-            "User-Agent": (
-                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-            ),
-            "Accept": "application/gzip,application/x-gzip,*/*",
-        })
-        resp.raise_for_status()
-        data = resp.content
-        if data[:2] == b"\x1f\x8b":
-            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
-                return f.read().decode("utf-8")
-        return data.decode("utf-8")
-    except Exception as e:
-        raise RuntimeError(f"Failed to download .gz sitemap: {e}") from e
+    resp = page.request.fetch(url, timeout=120000)
+    if not resp.ok:
+        raise RuntimeError(f"HTTP {resp.status}: {resp.status_text}")
+    data: bytes = resp.body()
+    if data[:2] == b"\x1f\x8b":
+        with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+            return f.read().decode("utf-8")
+    return data.decode("utf-8")
 
 
 def _fetch_sitemap_text(page: Page, url: str) -> str:
