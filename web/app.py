@@ -21,6 +21,10 @@ log_buffer = LogBuffer()
 logger = setup_logging(log_buffer)
 manager = ScraperManager(log_buffer)
 
+# In-memory rate limiter for /api/sitemap-urls
+_sitemap_url_last = {}
+_sitemap_url_cache = {}
+
 
 @app.route("/")
 def dashboard():
@@ -89,11 +93,22 @@ def discover_scraper():
 
 @app.route("/api/sitemap-urls")
 def sitemap_urls():
-    """Return sitemap file URLs for a source (fetched live from the index)."""
+    """Return sitemap file URLs for a source (cached for 60s, rate-limited)."""
     source = request.args.get("source", "YachtWorld")
     cfg = SITE_MAPS.get(source)
     if not cfg:
         return jsonify({"error": "Unknown source", "urls": []}), 400
+
+    # Rate limit: max 1 request per 5 seconds per source
+    now = time.time()
+    last = _sitemap_url_last.get(source, 0)
+    if now - last < 5:
+        # Return cached result if available
+        cached = _sitemap_url_cache.get(source)
+        if cached:
+            return jsonify(cached)
+        return jsonify({"error": "Rate limited. Please wait a few seconds.", "urls": []}), 429
+    _sitemap_url_last[source] = now
 
     log_buffer.write(f"[dashboard] GET /api/sitemap-urls source={source}")
     index_url = cfg["index_url"]
@@ -104,14 +119,12 @@ def sitemap_urls():
 
         with BoatBrowser() as browser:
             page = browser.page
-            # Visit the site first to warm up session
             domain = urlparse(index_url).netloc
             try:
                 page.goto(f"https://{domain}/", wait_until="networkidle", timeout=20000)
             except Exception:
                 pass
 
-            # Fetch the index XML
             text = page.evaluate(
                 """async (url) => {
                     const resp = await fetch(url, { credentials: 'include' });
@@ -131,7 +144,9 @@ def sitemap_urls():
                     if sitemap_filter is None or sitemap_filter in loc_text:
                         urls.append(loc_text)
 
-        return jsonify({"source": source, "count": len(urls), "urls": urls})
+        result = {"source": source, "count": len(urls), "urls": urls}
+        _sitemap_url_cache[source] = result
+        return jsonify(result)
     except Exception as exc:
         log_buffer.write(f"[dashboard] sitemap-urls ERROR: {exc}")
         return jsonify({"error": str(exc), "urls": []}), 500

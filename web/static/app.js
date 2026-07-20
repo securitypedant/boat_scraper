@@ -518,15 +518,26 @@ if (elsSitemap.btnShow) {
         showToast('Failed: ' + data.error, 'error');
         return;
       }
-      elsSitemap.urls.innerHTML = data.urls.map(u =>
-        `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-family:monospace;font-size:.8rem;">
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${u}</span>
+      elsSitemap.urls.innerHTML = data.urls.map(u => {
+        const filename = u.split('/').pop();
+        return `<div style="display:flex;gap:8px;align-items:center;padding:4px 0;border-bottom:1px solid var(--border);font-family:monospace;font-size:.8rem;">
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${u}">${filename}</span>
+          <button class="btn-download-url" data-url="${u}" data-filename="${filename}" style="padding:2px 8px;font-size:.75rem;background:var(--success);color:#fff;border:none;border-radius:4px;cursor:pointer;">Download</button>
           <button class="btn-copy-url" data-url="${u}" style="padding:2px 8px;font-size:.75rem;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;">Copy</button>
-        </div>`
-      ).join('');
+        </div>`;
+      }).join('');
       elsSitemap.list.style.display = 'block';
       elsSitemap.instructions.style.display = 'inline';
       showToast(data.count + ' sitemap URLs loaded');
+
+      // Wire up download buttons
+      elsSitemap.urls.querySelectorAll('.btn-download-url').forEach(btn => {
+        btn.addEventListener('click', () => {
+          window.open(btn.dataset.url, '_blank');
+          btn.textContent = 'Opened';
+          setTimeout(() => btn.textContent = 'Download', 1500);
+        });
+      });
 
       // Wire up copy buttons
       elsSitemap.urls.querySelectorAll('.btn-copy-url').forEach(btn => {
