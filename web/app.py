@@ -70,6 +70,20 @@ def stop_scraper():
     return jsonify({"success": ok, "running": manager.is_running})
 
 
+@app.route("/api/discover", methods=["POST"])
+def discover_scraper():
+    log_buffer.write("[dashboard] POST /api/discover received")
+    data = request.get_json(silent=True) or {}
+    source = data.get("source")  # e.g. "BoatTrader", "YachtWorld", "BoatsDotCom"
+    try:
+        ok = manager.discover(source=source)
+        log_buffer.write(f"[dashboard] manager.discover() returned {ok}, source={source}")
+    except Exception as exc:
+        log_buffer.write(f"[dashboard] manager.discover() ERROR: {exc}")
+        ok = False
+    return jsonify({"success": ok, "running": manager.discover_running})
+
+
 @app.route("/api/prescrape", methods=["POST"])
 def start_prescraper():
     log_buffer.write("[dashboard] POST /api/prescrape received")

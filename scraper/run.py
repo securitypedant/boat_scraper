@@ -1,4 +1,6 @@
 """Main entrypoint for the boat scraper."""
+from __future__ import annotations
+
 import argparse
 import random
 import signal
@@ -6,12 +8,16 @@ import sys
 import threading
 import time
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 from scraper.browser import BoatBrowser
 from scraper.config import MAX_ATTEMPTS, MIN_DELAY, MAX_DELAY
 from scraper.database import get_db, init_db
 from scraper.detail_scraper import scrape_listing
 from scraper.sitemap import discover_urls, SITE_MAPS
+
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
 
 
 _running = True
@@ -129,7 +135,31 @@ def _get_stats(db) -> dict:
     }
 
 
-def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: threading.Event | None = None, source: str | None = None):
+def discover_only(page: Page, source: str | None = None) -> list[str]:
+    """Discover URLs from sitemaps without scraping them.
+
+    Args:
+        page: An authenticated Playwright page.
+        source: Which site's URLs to discover. If None, discovers all sites.
+
+    Returns a list of unique listing URLs added.
+    """
+    all_urls = []
+    if source:
+        return discover_urls(page, source=source)
+    for site in ["BoatTrader", "YachtWorld", "BoatsDotCom"]:
+        urls = discover_urls(page, source=site)
+        all_urls.extend(urls)
+    return all_urls
+
+
+def scrape(
+    limit: int | None = None,
+    retry_failed: bool = False,
+    stop_event: threading.Event | None = None,
+    discover: bool = True,
+    source: str | None = None,
+):
     """Main scraping loop.
 
     Args:
@@ -137,7 +167,8 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
         retry_failed: If True, retry URLs previously marked as failed.
         stop_event: If provided, the scraper will check this event instead of
                     global signal handling. Used for programmatic control.
-        source: If provided, only scrape URLs matching this source domain.
+        discover: If False, skip sitemap discovery (use existing pending URLs only).
+        source: If provided, only discover/scrape URLs matching this source domain.
     """
     # Initialize database
     init_db()
@@ -154,14 +185,14 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
         page = browser.page
 
         # Phase 1: Discover URLs using the authenticated browser
-        if not retry_failed:
+        if discover and not retry_failed:
             if source:
                 discover_urls(page, source=source)
             else:
                 # Discover URLs for all sites
                 for site in SITE_MAPS:
                     discover_urls(page, source=site)
-        else:
+        elif retry_failed:
             # Reset failed to pending
             db.execute("UPDATE progress SET status = 'pending' WHERE status = 'failed'")
             db.commit()
@@ -176,21 +207,6 @@ def scrape(limit: int | None = None, retry_failed: bool = False, stop_event: thr
         if not urls:
             print("[run] No pending URLs to scrape.")
             return
-
-        # Filter by source if specified
-        if source:
-            before = len(urls)
-            source_domain = {
-                "BoatTrader": "boattrader.com",
-                "YachtWorld": "yachtworld.com",
-                "BoatsDotCom": "boats.com",
-            }.get(source)
-            if source_domain:
-                urls = [url for url in urls if source_domain in url.lower()]
-                print(f"[run] Filtered {before} URLs by source='{source}' → {len(urls)} matching")
-            if not urls:
-                print(f"[run] No pending URLs match source='{source}'.")
-                return
 
         if limit is not None:
             urls = urls[:limit]

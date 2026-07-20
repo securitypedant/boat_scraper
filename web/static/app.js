@@ -11,6 +11,7 @@ const els = {
   statPending: document.getElementById('stat-pending'),
   statDone: document.getElementById('stat-done'),
   statFailed: document.getElementById('stat-failed'),
+  btnDiscover: document.getElementById('btn-discover'),
   btnStart: document.getElementById('btn-start'),
   btnTest: document.getElementById('btn-test'),
   btnStop: document.getElementById('btn-stop'),
@@ -119,6 +120,7 @@ function appendLog(line) {
 // --- Status Polling ---
 let _lastPrescrapeRunning = false;
 let _lastScraperRunning = false;
+let _lastDiscoverRunning = false;
 
 async function updateStatus() {
   try {
@@ -163,12 +165,15 @@ async function updateStatus() {
       prescrapeProgress.style.display = 'none';
     }
 
-    els.btnStart.disabled = data.scraper_running || data.prescraper_running;
-    els.btnTest.disabled = data.scraper_running || data.prescraper_running;
-    els.btnStop.disabled = !data.scraper_running;
-    els.btnPrescrape.disabled = data.scraper_running || data.prescraper_running;
-    els.btnWipe.disabled = data.scraper_running || data.prescraper_running;
-    els.btnWipeMfrs.disabled = data.scraper_running || data.prescraper_running;
+    const anythingRunning = data.scraper_running || data.discover_running || data.prescraper_running;
+
+    els.btnDiscover.disabled = anythingRunning;
+    els.btnStart.disabled = anythingRunning;
+    els.btnTest.disabled = anythingRunning;
+    els.btnStop.disabled = !data.scraper_running && !data.discover_running;
+    els.btnPrescrape.disabled = anythingRunning;
+    els.btnWipe.disabled = anythingRunning;
+    els.btnWipeMfrs.disabled = anythingRunning;
 
     // Detect transitions for toast notifications
     if (_lastPrescrapeRunning && !data.prescraper_running) {
@@ -179,8 +184,13 @@ async function updateStatus() {
       showToast('Scraper finished!', 'success');
       setLastAction('Scraper complete');
     }
+    if (_lastDiscoverRunning && !data.discover_running) {
+      showToast('Index pull finished!', 'success');
+      setLastAction('Index pull complete');
+    }
     _lastPrescrapeRunning = data.prescraper_running;
     _lastScraperRunning = data.scraper_running;
+    _lastDiscoverRunning = data.discover_running;
 
   } catch (e) {
     uiErr('Status poll failed: ' + e.message);
@@ -188,13 +198,30 @@ async function updateStatus() {
 }
 
 // --- Controls ---
+els.btnDiscover.addEventListener('click', async () => {
+  dbg('Pull Index clicked');
+  setLastAction('Pulling sitemap index…');
+  const source = document.getElementById('scrape-source').value;
+  try {
+    const res = await fetch('/api/discover', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null}) });
+    const data = await res.json();
+    dbg('discover response: ' + JSON.stringify(data));
+    if (data.success) {
+      showToast('Pulling index for ' + (source || 'All Sites'));
+    } else {
+      showToast('Discovery already running', 'error');
+    }
+  } catch (e) {
+    uiErr('POST /api/discover failed: ' + e.message);
+  }
+});
+
 els.btnStart.addEventListener('click', async () => {
   dbg('Start Scraping clicked');
   els.btnStart.disabled = true;
   setLastAction('Starting scraper…');
-  const source = document.getElementById('scrape-source').value;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
     const data = await res.json();
     dbg('start response: ' + JSON.stringify(data));
     if (data.success) {
@@ -211,9 +238,8 @@ els.btnTest.addEventListener('click', async () => {
   dbg('Test Run (5) clicked');
   els.btnTest.disabled = true;
   setLastAction('Starting test run (5 URLs)…');
-  const source = document.getElementById('scrape-source').value;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5, source: source || null}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5}) });
     const data = await res.json();
     dbg('test response: ' + JSON.stringify(data));
     if (data.success) {

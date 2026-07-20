@@ -7,7 +7,8 @@ from datetime import datetime, timezone
 
 from prescraper.uscg_prescraper import run_prescrape as uscg_prescrape
 from scraper.database import get_db
-from scraper.run import scrape
+from scraper.run import discover_only, scrape
+from scraper.browser import BoatBrowser
 
 from web.log_buffer import LogBuffer
 
@@ -18,6 +19,7 @@ class ScraperManager:
     def __init__(self, log_buffer: LogBuffer):
         self.log_buffer = log_buffer
         self._scraper_thread: threading.Thread | None = None
+        self._discover_thread: threading.Thread | None = None
         self._prescraper_thread: threading.Thread | None = None
         self._stop_event = threading.Event()
         self._stop_requested = False
@@ -32,11 +34,17 @@ class ScraperManager:
             self._scraper_thread is not None and self._scraper_thread.is_alive()
         ) or (
             self._prescraper_thread is not None and self._prescraper_thread.is_alive()
+        ) or (
+            self._discover_thread is not None and self._discover_thread.is_alive()
         )
 
     @property
     def scraper_running(self) -> bool:
         return self._scraper_thread is not None and self._scraper_thread.is_alive()
+
+    @property
+    def discover_running(self) -> bool:
+        return self._discover_thread is not None and self._discover_thread.is_alive()
 
     @property
     def prescraper_running(self) -> bool:
@@ -86,6 +94,23 @@ class ScraperManager:
         self._stop_event.set()
         return True
 
+    def discover(self, source: str | None = None) -> bool:
+        """Start sitemap discovery in a background thread."""
+        self._log(f"discover() called: source={source}")
+        if self.discover_running:
+            self._log("discover() rejected: discovery already running")
+            return False
+
+        self._start_time = datetime.now(timezone.utc)
+        self._discover_thread = threading.Thread(
+            target=self._run_discover,
+            args=(source,),
+            daemon=True,
+        )
+        self._discover_thread.start()
+        self._log("discover() accepted: discover thread started")
+        return True
+
     def prescrape(self) -> bool:
         """Start the USCG manufacturer prescraper in a background thread."""
         self._log("prescrape() called")
@@ -124,6 +149,7 @@ class ScraperManager:
             scrape(
                 limit=limit,
                 retry_failed=retry_failed,
+                discover=False,
                 stop_event=self._stop_event,
                 source=source,
             )
@@ -131,6 +157,22 @@ class ScraperManager:
 
         self._redirect_stdout(run)
         self._log("--- scraper thread finished ---")
+        self._start_time = None
+
+    def _run_discover(self, source: str | None) -> None:
+        self._log("--- discover thread started ---")
+
+        def run():
+            self._log("Entering discover_only()...")
+            try:
+                with BoatBrowser() as browser:
+                    discover_only(browser.page, source=source)
+            except Exception:
+                traceback.print_exc()
+            self._log("discover_only() returned")
+
+        self._redirect_stdout(run)
+        self._log("--- discover thread finished ---")
         self._start_time = None
 
     def _run_prescraper(self) -> None:
@@ -154,6 +196,7 @@ class ScraperManager:
         status = {
             "running": self.is_running,
             "scraper_running": self.scraper_running,
+            "discover_running": self.discover_running,
             "prescraper_running": self.prescraper_running,
             "stop_requested": self._stop_requested,
             "start_time": self._start_time.isoformat() if self._start_time else None,
