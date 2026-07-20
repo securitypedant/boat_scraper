@@ -17,7 +17,7 @@ SITE_MAPS = {
     "BoatTrader": {
         "index_url": "https://www.boattrader.com/sitemap-index-en.xml",
         "sitemap_filter": "boatdetail",
-        "url_filter": None,  # accept all URLs
+        "url_filter": None,  # accept all URLs (boatdetail sitemaps are already filtered by sitemap_filter)
     },
     "YachtWorld": {
         "index_url": "https://www.yachtworld.com/sitemap-index-us.xml",
@@ -27,7 +27,8 @@ SITE_MAPS = {
     "BoatsDotCom": {
         "index_url": "https://www.boats.com/sitemap.xml",
         "sitemap_filter": None,
-        "url_filter": "/boat",
+        "url_filter": None,  # boats.com sitemaps only contain search/filter pages, not individual listings
+        "no_detail_sitemaps": True,  # flag to skip URL extraction after parsing index
     },
 }
 
@@ -217,6 +218,11 @@ def discover_urls(
                 sitemap_urls.append(loc_text)
 
     print(f"[sitemap] Found {len(sitemap_urls)} {source} sitemap files.")
+
+    if config.get("no_detail_sitemaps"):
+        print(f"[sitemap] {source} does not expose individual boat listing URLs in sitemaps. Skipping URL extraction.")
+        db.close()
+        return []
 
     all_urls = set()
     for sm_url in sitemap_urls[:50]:  # cap at 50 sitemap files

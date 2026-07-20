@@ -10,7 +10,10 @@ def get_db() -> sqlite3.Connection:
     return conn
 
 
-def build_query(
+def _build_where(
+    sql: str,
+    params: list,
+    *,
     year: int | None = None,
     make: str | None = None,
     boat_class: str | None = None,
@@ -21,20 +24,8 @@ def build_query(
     max_length: int | None = None,
     has_field: str | None = None,
     missing_field: str | None = None,
-    order_by: str = "scraped_at DESC",
-    limit: int | None = None,
-    offset: int = 0,
 ) -> tuple[str, list]:
-    """Build a parameterized SELECT query."""
-    sql = """
-        SELECT
-            id, url, year, name, make, length, class, engine,
-            total_power, engine_hours, model, capacity, hin, source, scraped_at
-        FROM boats
-        WHERE 1=1
-    """
-    params: list = []
-
+    """Append WHERE conditions to sql and extend params."""
     if year is not None:
         sql += " AND year = ?"
         params.append(year)
@@ -73,6 +64,41 @@ def build_query(
     if missing_field is not None:
         sql += f" AND {missing_field} IS NULL"
 
+    return sql, params
+
+
+def build_query(
+    year: int | None = None,
+    make: str | None = None,
+    boat_class: str | None = None,
+    engine: str | None = None,
+    hin: str | None = None,
+    source: str | None = None,
+    min_length: int | None = None,
+    max_length: int | None = None,
+    has_field: str | None = None,
+    missing_field: str | None = None,
+    order_by: str = "scraped_at DESC",
+    limit: int | None = None,
+    offset: int = 0,
+) -> tuple[str, list]:
+    """Build a parameterized SELECT query."""
+    sql = """
+        SELECT
+            id, url, year, name, make, length, class, engine,
+            total_power, engine_hours, model, capacity, hin, source, scraped_at
+        FROM boats
+        WHERE 1=1
+    """
+    params: list = []
+
+    sql, params = _build_where(
+        sql, params,
+        year=year, make=make, boat_class=boat_class, engine=engine,
+        hin=hin, source=source, min_length=min_length, max_length=max_length,
+        has_field=has_field, missing_field=missing_field,
+    )
+
     if order_by:
         # Basic sanitization: only allow known columns
         allowed_cols = {
@@ -92,5 +118,31 @@ def build_query(
     if offset:
         sql += " OFFSET ?"
         params.append(offset)
+
+    return sql, params
+
+
+def build_delete_query(
+    year: int | None = None,
+    make: str | None = None,
+    boat_class: str | None = None,
+    engine: str | None = None,
+    hin: str | None = None,
+    source: str | None = None,
+    min_length: int | None = None,
+    max_length: int | None = None,
+    has_field: str | None = None,
+    missing_field: str | None = None,
+) -> tuple[str, list]:
+    """Build a parameterized DELETE query for boats matching filters."""
+    sql = "DELETE FROM boats WHERE 1=1"
+    params: list = []
+
+    sql, params = _build_where(
+        sql, params,
+        year=year, make=make, boat_class=boat_class, engine=engine,
+        hin=hin, source=source, min_length=min_length, max_length=max_length,
+        has_field=has_field, missing_field=missing_field,
+    )
 
     return sql, params

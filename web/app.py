@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
-from query.database import build_query, get_db
+from query.database import build_delete_query, build_query, get_db
 from scraper.config import DB_PATH
 from scraper.sitemap import SITE_MAPS
 from web.log_buffer import LogBuffer, setup_logging
@@ -301,6 +301,44 @@ def upload_sitemaps():
 
     log_buffer.write(f"[dashboard] Uploaded {len(saved)} sitemap files")
     return jsonify({"success": True, "saved": saved, "count": len(saved)})
+
+
+@app.route("/api/delete-all", methods=["POST"])
+def delete_all():
+    """Delete all boats matching the query filters (ignoring limit/offset)."""
+    data = request.get_json(silent=True) or {}
+
+    # Build DELETE query using same filters as query endpoint
+    sql, params = build_delete_query(
+        year=data.get("year"),
+        make=data.get("make"),
+        boat_class=data.get("boat_class"),
+        engine=data.get("engine"),
+        hin=data.get("hin"),
+        source=data.get("source"),
+        min_length=data.get("min_length"),
+        max_length=data.get("max_length"),
+        has_field=data.get("has_field"),
+        missing_field=data.get("missing_field"),
+    )
+
+    db = get_db()
+    # First count how many will be deleted
+    count_sql = sql.replace("DELETE FROM boats", "SELECT COUNT(*) FROM boats")
+    cursor = db.execute(count_sql, params)
+    to_delete = cursor.fetchone()[0]
+
+    if to_delete == 0:
+        db.close()
+        return jsonify({"success": True, "deleted": 0, "message": "No matching records found."})
+
+    cursor = db.execute(sql, params)
+    deleted = cursor.rowcount
+    db.commit()
+    db.close()
+
+    log_buffer.write(f"[dashboard] Deleted {deleted} boat records matching filters.")
+    return jsonify({"success": True, "deleted": deleted, "message": f"Deleted {deleted} records."})
 
 
 @app.route("/api/boat/<int:boat_id>")

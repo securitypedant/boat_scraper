@@ -20,6 +20,7 @@ const els = {
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
   btnRetry: document.getElementById('btn-retry'),
   btnDownload: document.getElementById('btn-download'),
+  btnDeleteAll: document.getElementById('btn-delete-all'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
   queryTotal: document.getElementById('query-total'),
@@ -465,16 +466,41 @@ function buildQueryParams() {
   return p;
 }
 
+function buildQueryFiltersJson() {
+  const filters = {};
+  const year = document.getElementById('q-year').value;
+  if (year) filters.year = parseInt(year, 10);
+  const make = document.getElementById('q-make').value;
+  if (make) filters.make = make;
+  const cls = document.getElementById('q-class').value;
+  if (cls) filters.boat_class = cls;
+  const engine = document.getElementById('q-engine').value;
+  if (engine) filters.engine = engine;
+  const hin = document.getElementById('q-hin').value;
+  if (hin) filters.hin = hin;
+  const source = document.getElementById('q-source').value;
+  if (source) filters.source = source;
+  const minLen = document.getElementById('q-min-length').value;
+  if (minLen) filters.min_length = parseInt(minLen, 10);
+  const maxLen = document.getElementById('q-max-length').value;
+  if (maxLen) filters.max_length = parseInt(maxLen, 10);
+  return filters;
+}
+
 function renderResults(data) {
   if (!data.success) {
     els.results.innerHTML = `<div class="empty">Error: ${data.error}</div>`;
+    els.btnDeleteAll.style.display = 'none';
     return;
   }
   els.queryTotal.textContent = `Total: ${data.total} | Showing ${data.rows.length}`;
   if (data.rows.length === 0) {
     els.results.innerHTML = '<div class="empty">No results.</div>';
+    els.btnDeleteAll.style.display = 'none';
     return;
   }
+
+  els.btnDeleteAll.style.display = 'inline-flex';
 
   const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin','source'];
   let html = '<table><thead><tr>';
@@ -658,6 +684,41 @@ const boatApp = { edit: openEditModal, del: deleteBoat };
 if (typeof window !== 'undefined') window.boatApp = boatApp;
 
 if (els.btnQuery) els.btnQuery.addEventListener('click', runQuery);
+
+if (els.btnDeleteAll) {
+  els.btnDeleteAll.addEventListener('click', async () => {
+    const filters = buildQueryFiltersJson();
+    const count = document.getElementById('query-total').textContent.match(/Total:\s*(\d+)/)?.[1] || 'all';
+    if (!confirm(`Delete ALL ${count} records matching current filters?\n\nThis cannot be undone.`)) return;
+    els.btnDeleteAll.disabled = true;
+    els.btnDeleteAll.textContent = 'Deleting…';
+    setLastAction('Deleting all matching records…');
+    try {
+      const res = await fetch('/api/delete-all', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(filters),
+      });
+      const data = await res.json();
+      dbg('delete-all response: ' + JSON.stringify(data));
+      if (data.success) {
+        showToast(data.message, 'success');
+        setLastAction('Delete complete');
+        els.results.innerHTML = '<div class="empty">Records deleted. Run query again.</div>';
+        els.btnDeleteAll.style.display = 'none';
+        updateStatus();
+      } else {
+        showToast('Delete failed: ' + (data.error || 'Unknown'), 'error');
+        els.btnDeleteAll.disabled = false;
+        els.btnDeleteAll.textContent = 'Delete All Matching';
+      }
+    } catch (e) {
+      uiErr('POST /api/delete-all failed: ' + e.message);
+      els.btnDeleteAll.disabled = false;
+      els.btnDeleteAll.textContent = 'Delete All Matching';
+    }
+  });
+}
 
 // Poll status every 2 seconds
 setInterval(updateStatus, 2000);
