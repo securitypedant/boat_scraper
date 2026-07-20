@@ -113,19 +113,22 @@ def _fetch_gz(page: Page, url: str) -> str:
     return data.decode("utf-8")
 
 
-def _fetch_sitemap_text(page: Page, url: str) -> str:
+def _fetch_sitemap_text(page: Page, url: str, refresh: bool = False) -> str:
     """Fetch a sitemap URL, handling gzip decompression if needed."""
     if url.endswith(".gz"):
-        return _fetch_gz(page, url)
+        return _fetch_gz(page, url, refresh=refresh)
     return _fetch_text(page, url)
 
 
-def discover_urls(page: Page, source: str | None = None) -> list[str]:
+def discover_urls(
+    page: Page, source: str | None = None, refresh: bool = False
+) -> list[str]:
     """Discover boat detail URLs from a site's sitemaps and store them in the DB.
 
     Args:
         page: An authenticated Playwright page.
         source: Which site's URLs to discover. If None, discovers BoatTrader URLs.
+        refresh: If True, ignore local cached .gz files and refetch from the web.
 
     Returns a list of unique listing URLs (may be empty if already populated).
     """
@@ -140,17 +143,18 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
     domain = _domain_for_source(source)
     db = get_db()
 
-    # Check if we already have pending URLs for THIS site
-    cursor = db.execute(
-        "SELECT COUNT(*) FROM progress WHERE status = 'pending' AND url LIKE ?",
-        (f"%{domain}%",)
-    )
-    pending_count = cursor.fetchone()[0]
+    # Check if we already have pending URLs for THIS site (skip when refresh=True)
+    if not refresh:
+        cursor = db.execute(
+            "SELECT COUNT(*) FROM progress WHERE status = 'pending' AND url LIKE ?",
+            (f"%{domain}%",)
+        )
+        pending_count = cursor.fetchone()[0]
 
-    if pending_count > 0:
-        print(f"[sitemap] Found {pending_count} pending {source} URLs already in database. Skipping discovery.")
-        db.close()
-        return []
+        if pending_count > 0:
+            print(f"[sitemap] Found {pending_count} pending {source} URLs already in database. Skipping discovery.")
+            db.close()
+            return []
 
     index_url = config["index_url"]
     sitemap_filter = config["sitemap_filter"]
@@ -173,7 +177,7 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
     index_text = None
     for attempt in range(2):
         try:
-            index_text = _fetch_sitemap_text(page, index_url)
+            index_text = _fetch_sitemap_text(page, index_url, refresh=refresh)
             break
         except Exception as e:
             print(f"[sitemap] Failed to fetch {source} sitemap index (attempt {attempt + 1}): {e}")
@@ -217,7 +221,7 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
     for sm_url in sitemap_urls[:50]:  # cap at 50 sitemap files
         print(f"[sitemap] Fetching {sm_url}...")
         try:
-            content = _fetch_sitemap_text(page, sm_url)
+            content = _fetch_sitemap_text(page, sm_url, refresh=refresh)
             # Skip if response is HTML
             stripped = content.strip().lower()
             if "<html" in stripped[:500] or "<!doctype" in stripped[:500]:

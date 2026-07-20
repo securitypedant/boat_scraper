@@ -18,7 +18,6 @@ const els = {
   btnPrescrape: document.getElementById('btn-prescrape'),
   btnWipe: document.getElementById('btn-wipe'),
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
-  btnBackfill: document.getElementById('btn-backfill'),
   btnRetry: document.getElementById('btn-retry'),
   btnDownload: document.getElementById('btn-download'),
   logs: document.getElementById('logs'),
@@ -34,7 +33,6 @@ const prescrapePct = document.getElementById('prescrape-pct');
 const prescrapeLabel = document.getElementById('prescrape-label');
 
 let isRunning = false;
-let _backfillRunning = false;
 
 // Modal elements
 const modal = document.getElementById('edit-modal');
@@ -202,12 +200,13 @@ els.btnDiscover.addEventListener('click', async () => {
   dbg('Pull Index clicked');
   setLastAction('Pulling sitemap index…');
   const source = document.getElementById('scrape-source').value;
+  const refresh = document.getElementById('cb-refresh').checked;
   try {
-    const res = await fetch('/api/discover', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null}) });
+    const res = await fetch('/api/discover', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null, refresh: refresh}) });
     const data = await res.json();
     dbg('discover response: ' + JSON.stringify(data));
     if (data.success) {
-      showToast('Pulling index for ' + (source || 'All Sites'));
+      showToast('Pulling index for ' + (source || 'All Sites') + (refresh ? ' (refresh)' : ''));
     } else {
       showToast('Discovery already running', 'error');
     }
@@ -327,29 +326,6 @@ els.btnWipeMfrs.addEventListener('click', async () => {
     }
   } catch (e) {
     uiErr('POST /api/wipe-manufacturers failed: ' + e.message);
-  }
-});
-
-els.btnBackfill.addEventListener('click', async () => {
-  if (_backfillRunning) return;
-  if (!confirm('Backfill Source?\n\nThis will set source="BoatTrader" on all existing records that don\'t have one.\n\nProceed?')) return;
-  _backfillRunning = true;
-  els.btnBackfill.disabled = true;
-  setLastAction('Backfilling source…');
-  try {
-    const res = await fetch('/api/backfill-source', { method: 'POST' });
-    const data = await res.json();
-    dbg('backfill response: ' + JSON.stringify(data));
-    if (data.success) {
-      showToast(`Backfilled ${data.updated} records. Total BoatTrader: ${data.total}.`);
-      setLastAction('Backfill complete');
-      updateStatus();
-    }
-  } catch (e) {
-    uiErr('POST /api/backfill-source failed: ' + e.message);
-  } finally {
-    _backfillRunning = false;
-    els.btnBackfill.disabled = false;
   }
 });
 

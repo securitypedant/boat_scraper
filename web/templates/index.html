@@ -42,6 +42,10 @@
   <h2>Controls</h2>
   <div class="controls">
     <button id="btn-discover" class="btn btn-primary">Pull Index</button>
+    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer;">
+      <input type="checkbox" id="cb-refresh" style="accent-color:var(--accent);">
+      Force re-download
+    </label>
     <button id="btn-start" class="btn btn-primary">Start Scraping</button>
     <button id="btn-test" class="btn btn-primary">Test Run (5)</button>
     <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
@@ -58,7 +62,6 @@
     <button id="btn-prescrape" class="btn btn-primary">Prescrape Manufacturers</button>
     <button id="btn-wipe" class="btn btn-danger">Wipe Boats</button>
     <button id="btn-wipe-mfrs" class="btn btn-danger">Wipe Manufacturers</button>
-    <button id="btn-backfill" class="btn btn-primary">Backfill Source</button>
     <button id="btn-retry" class="btn btn-primary">Retry Failed</button>
     <button id="btn-download" class="btn btn-primary">Download DB</button>
   </div>

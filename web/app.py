@@ -77,9 +77,10 @@ def discover_scraper():
     log_buffer.write("[dashboard] POST /api/discover received")
     data = request.get_json(silent=True) or {}
     source = data.get("source")  # e.g. "BoatTrader", "YachtWorld", "BoatsDotCom"
+    refresh = data.get("refresh", False)
     try:
-        ok = manager.discover(source=source)
-        log_buffer.write(f"[dashboard] manager.discover() returned {ok}, source={source}")
+        ok = manager.discover(source=source, refresh=refresh)
+        log_buffer.write(f"[dashboard] manager.discover() returned {ok}, source={source} refresh={refresh}")
     except Exception as exc:
         log_buffer.write(f"[dashboard] manager.discover() ERROR: {exc}")
         ok = False
@@ -353,20 +354,6 @@ def wipe_manufacturers():
     db.close()
     log_buffer.write(f"[dashboard] Wiped {deleted} manufacturers. Remaining: {remaining}")
     return jsonify({"success": True, "deleted": deleted, "remaining": remaining})
-
-
-@app.route("/api/backfill-source", methods=["POST"])
-def backfill_source():
-    """Backfill source='BoatTrader' for all existing records that have NULL source."""
-    db = get_db()
-    cursor = db.execute("UPDATE boats SET source = 'BoatTrader' WHERE source IS NULL")
-    db.commit()
-    updated = cursor.rowcount
-    cursor = db.execute("SELECT COUNT(*) FROM boats WHERE source = 'BoatTrader'")
-    total = cursor.fetchone()[0]
-    db.close()
-    log_buffer.write(f"[dashboard] Backfilled {updated} records with source='BoatTrader'. Total: {total}")
-    return jsonify({"success": True, "updated": updated, "total": total})
 
 
 @app.route("/api/retry-failed", methods=["POST"])

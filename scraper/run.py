@@ -135,20 +135,21 @@ def _get_stats(db) -> dict:
     }
 
 
-def discover_only(page: Page, source: str | None = None) -> list[str]:
+def discover_only(page: Page, source: str | None = None, refresh: bool = False) -> list[str]:
     """Discover URLs from sitemaps without scraping them.
 
     Args:
         page: An authenticated Playwright page.
         source: Which site's URLs to discover. If None, discovers all sites.
+        refresh: If True, ignore local cached .gz files and refetch from the web.
 
     Returns a list of unique listing URLs added.
     """
     all_urls = []
     if source:
-        return discover_urls(page, source=source)
+        return discover_urls(page, source=source, refresh=refresh)
     for site in ["BoatTrader", "YachtWorld", "BoatsDotCom"]:
-        urls = discover_urls(page, source=site)
+        urls = discover_urls(page, source=site, refresh=refresh)
         all_urls.extend(urls)
     return all_urls
 

@@ -94,9 +94,9 @@ class ScraperManager:
         self._stop_event.set()
         return True
 
-    def discover(self, source: str | None = None) -> bool:
+    def discover(self, source: str | None = None, refresh: bool = False) -> bool:
         """Start sitemap discovery in a background thread."""
-        self._log(f"discover() called: source={source}")
+        self._log(f"discover() called: source={source} refresh={refresh}")
         if self.discover_running:
             self._log("discover() rejected: discovery already running")
             return False
@@ -104,7 +104,7 @@ class ScraperManager:
         self._start_time = datetime.now(timezone.utc)
         self._discover_thread = threading.Thread(
             target=self._run_discover,
-            args=(source,),
+            args=(source, refresh),
             daemon=True,
         )
         self._discover_thread.start()
@@ -159,14 +159,14 @@ class ScraperManager:
         self._log("--- scraper thread finished ---")
         self._start_time = None
 
-    def _run_discover(self, source: str | None) -> None:
+    def _run_discover(self, source: str | None, refresh: bool) -> None:
         self._log("--- discover thread started ---")
 
         def run():
             self._log("Entering discover_only()...")
             try:
                 with BoatBrowser() as browser:
-                    discover_only(browser.page, source=source)
+                    discover_only(browser.page, source=source, refresh=refresh)
             except Exception:
                 traceback.print_exc()
             self._log("discover_only() returned")
