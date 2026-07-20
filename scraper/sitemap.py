@@ -53,10 +53,23 @@ def _fetch_text(page: Page, url: str) -> str:
 
 
 def _fetch_gz(page: Page, url: str) -> str:
-    """Fetch a .gz URL via direct HTTP (more robust than browser binary fetch)."""
+    """Fetch a .gz URL via direct HTTP using browser cookies (avoids Playwright wire crash).
+
+    Playwright's page.evaluate() crashes Chrome when returning multi-MB binary arrays
+    through the JSON wire. We extract the browser's cookies (including Cloudflare
+    clearance) and use requests for the heavy download.
+    """
     try:
-        resp = requests.get(url, timeout=60, headers={
-            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        # Build a requests session with the browser's cookies
+        session = requests.Session()
+        for cookie in page.context.cookies():
+            session.cookies.set(cookie["name"], cookie["value"], domain=cookie.get("domain"))
+
+        resp = session.get(url, timeout=90, headers={
+            "User-Agent": (
+                "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            ),
             "Accept": "application/gzip,application/x-gzip,*/*",
         })
         resp.raise_for_status()
@@ -65,21 +78,8 @@ def _fetch_gz(page: Page, url: str) -> str:
             with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
                 return f.read().decode("utf-8")
         return data.decode("utf-8")
-    except Exception:
-        # Fallback to browser if direct HTTP fails
-        raw: list[int] = page.evaluate(
-            """async (url) => {
-                const resp = await fetch(url, { credentials: 'include' });
-                const buf = await resp.arrayBuffer();
-                return Array.from(new Uint8Array(buf));
-            }""",
-            url,
-        )
-        data = bytes(raw)
-        if data[:2] == b"\x1f\x8b":
-            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
-                return f.read().decode("utf-8")
-        return data.decode("utf-8")
+    except Exception as e:
+        raise RuntimeError(f"Failed to download .gz sitemap: {e}") from e
 
 
 def _fetch_sitemap_text(page: Page, url: str) -> str:
