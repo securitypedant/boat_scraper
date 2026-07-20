@@ -5,6 +5,7 @@ import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
+import requests
 from playwright.sync_api import Page
 
 from scraper.database import get_db
@@ -52,20 +53,33 @@ def _fetch_text(page: Page, url: str) -> str:
 
 
 def _fetch_gz(page: Page, url: str) -> str:
-    """Fetch a .gz URL via the browser's fetch API and decompress in Python."""
-    raw: list[int] = page.evaluate(
-        """async (url) => {
-            const resp = await fetch(url, { credentials: 'include' });
-            const buf = await resp.arrayBuffer();
-            return Array.from(new Uint8Array(buf));
-        }""",
-        url,
-    )
-    data = bytes(raw)
-    if data[:2] == b"\x1f\x8b":
-        with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
-            return f.read().decode("utf-8")
-    return data.decode("utf-8")
+    """Fetch a .gz URL via direct HTTP (more robust than browser binary fetch)."""
+    try:
+        resp = requests.get(url, timeout=60, headers={
+            "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "application/gzip,application/x-gzip,*/*",
+        })
+        resp.raise_for_status()
+        data = resp.content
+        if data[:2] == b"\x1f\x8b":
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+                return f.read().decode("utf-8")
+        return data.decode("utf-8")
+    except Exception:
+        # Fallback to browser if direct HTTP fails
+        raw: list[int] = page.evaluate(
+            """async (url) => {
+                const resp = await fetch(url, { credentials: 'include' });
+                const buf = await resp.arrayBuffer();
+                return Array.from(new Uint8Array(buf));
+            }""",
+            url,
+        )
+        data = bytes(raw)
+        if data[:2] == b"\x1f\x8b":
+            with gzip.GzipFile(fileobj=io.BytesIO(data)) as f:
+                return f.read().decode("utf-8")
+        return data.decode("utf-8")
 
 
 def _fetch_sitemap_text(page: Page, url: str) -> str:
