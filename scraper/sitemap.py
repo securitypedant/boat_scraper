@@ -1,6 +1,7 @@
 """Per-site sitemap discovery and URL extraction."""
 import gzip
 import io
+import time
 import xml.etree.ElementTree as ET
 from urllib.parse import urlparse
 
@@ -111,12 +112,31 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
     url_filter = config["url_filter"]
 
     print(f"[sitemap] Fetching {source} sitemap index: {index_url}...")
-    try:
-        index_text = _fetch_sitemap_text(page, index_url)
-    except Exception as e:
-        print(f"[sitemap] Failed to fetch {source} sitemap index: {e}")
-        db.close()
-        return []
+
+    # For sites other than BoatTrader, navigate to the domain first to establish cookies/session
+    domain = config["index_url"].split("/")[2]
+    current = page.url.split("/")[2] if page.url else ""
+    if domain not in current:
+        try:
+            print(f"[sitemap] Visiting {domain} first to establish session...")
+            page.goto(f"https://{domain}/", wait_until="domcontentloaded", timeout=15000)
+            import time
+            time.sleep(2)
+        except Exception:
+            pass
+
+    index_text = None
+    for attempt in range(2):
+        try:
+            index_text = _fetch_sitemap_text(page, index_url)
+            break
+        except Exception as e:
+            print(f"[sitemap] Failed to fetch {source} sitemap index (attempt {attempt + 1}): {e}")
+            if attempt == 0:
+                time.sleep(2)
+            else:
+                db.close()
+                return []
 
     # Validate response is XML, not HTML
     stripped = index_text.strip().lower()
