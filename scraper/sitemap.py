@@ -118,8 +118,24 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
         db.close()
         return []
 
+    # Validate response is XML, not HTML
+    stripped = index_text.strip().lower()
+    if "<html" in stripped[:500] or "<!doctype" in stripped[:500]:
+        print(f"[sitemap] {source} returned HTML instead of XML (blocked): {index_url}")
+        db.close()
+        return []
+    if "<sitemapindex" not in stripped[:2000] and "<urlset" not in stripped[:2000]:
+        print(f"[sitemap] {source} sitemap does not contain expected XML tags (blocked): {index_url}")
+        db.close()
+        return []
+
     # Parse index XML
-    root = ET.fromstring(index_text)
+    try:
+        root = ET.fromstring(index_text)
+    except ET.ParseError as e:
+        print(f"[sitemap] Failed to parse {source} sitemap XML: {e}")
+        db.close()
+        return []
     ns = {"ns": "http://www.sitemaps.org/schemas/sitemap/0.9"}
 
     sitemap_urls = []
@@ -137,6 +153,11 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
         print(f"[sitemap] Fetching {sm_url}...")
         try:
             content = _fetch_sitemap_text(page, sm_url)
+            # Skip if response is HTML
+            stripped = content.strip().lower()
+            if "<html" in stripped[:500] or "<!doctype" in stripped[:500]:
+                print(f"[sitemap] {sm_url} returned HTML instead of XML (skipped)")
+                continue
             sm_root = ET.fromstring(content)
             for url_elem in sm_root.findall("ns:url", ns):
                 loc = url_elem.find("ns:loc", ns)
@@ -144,6 +165,9 @@ def discover_urls(page: Page, source: str | None = None) -> list[str]:
                     url = loc.text.strip()
                     if url_filter is None or url_filter in url:
                         all_urls.add(url)
+        except ET.ParseError as e:
+            print(f"[sitemap] XML parse error for {sm_url}: {e} (skipped)")
+            continue
         except Exception as e:
             print(f"[sitemap] Warning: Failed to fetch {sm_url}: {e}")
             continue
