@@ -18,12 +18,12 @@ SITE_MAPS = {
         "url_filter": None,  # accept all URLs
     },
     "YachtWorld": {
-        "index_url": "https://www.yachtworld.com/sitemap_index.xml",
+        "index_url": "https://www.yachtworld.com/sitemap-index-us.xml",
         "sitemap_filter": None,
         "url_filter": "/yacht/",
     },
     "BoatsDotCom": {
-        "index_url": "https://www.boats.com/sitemap_index.xml",
+        "index_url": "https://www.boats.com/sitemap.xml",
         "sitemap_filter": None,
         "url_filter": "/boat",
     },
