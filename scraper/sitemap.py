@@ -2,6 +2,7 @@
 import base64
 import gzip
 import io
+import re
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -22,8 +23,8 @@ SITE_MAPS = {
     },
     "YachtWorld": {
         "index_url": "https://www.yachtworld.com/sitemap-index-us.xml",
-        "sitemap_filter": None,
-        "url_filter": "/yacht/",
+        "sitemap_filter": "-boatdetail",
+        "url_filter": None,  # boatdetail sitemaps are already filtered by sitemap_filter
     },
     "BoatsDotCom": {
         "index_url": "https://www.boats.com/sitemap.xml",
@@ -41,6 +42,23 @@ def _domain_for_source(source: str) -> str:
         "YachtWorld": "yachtworld.com",
         "BoatsDotCom": "boats.com",
     }.get(source, source.lower())
+
+
+def _is_detail_url(url: str) -> bool:
+    """Validate that a YachtWorld/BoatTrader URL points to an individual boat listing.
+
+    Detail URLs have a numeric ID before the trailing slash:
+        /yacht/1992-custom-880-cruise-ship-8186858/  ✅
+    Non-detail pages lack the trailing numeric ID:
+        /yacht/brands/                               ❌
+        /yacht/builders/                             ❌
+        /yacht/                                      ❌
+    """
+    path = url.rstrip("/")
+    # Get last path segment
+    last_segment = path.split("/")[-1]
+    # Must contain at least one digit (the listing ID)
+    return bool(re.search(r"\d", last_segment))
 
 
 def _fetch_text(page: Page, url: str) -> str:
@@ -246,7 +264,8 @@ def discover_urls(
                 if loc is not None and loc.text:
                     url = loc.text.strip()
                     if url_filter is None or url_filter in url:
-                        all_urls.add(url)
+                        if _is_detail_url(url):
+                            all_urls.add(url)
         except ET.ParseError as e:
             print(f"[sitemap] XML parse error for {sm_url}: {e} (skipped)")
             continue
