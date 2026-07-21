@@ -292,12 +292,12 @@ def upload_sitemaps():
 
     saved = []
     for f in files:
-        if f.filename and f.filename.endswith(".gz"):
+        if f.filename and (f.filename.endswith(".gz") or f.filename.endswith(".xml")):
             dest = upload_dir / f.filename
             f.save(str(dest))
             saved.append(f.filename)
         else:
-            log_buffer.write(f"[dashboard] Skipping non-.gz upload: {f.filename}")
+            log_buffer.write(f"[dashboard] Skipping upload: {f.filename}")
 
     log_buffer.write(f"[dashboard] Uploaded {len(saved)} sitemap files")
     return jsonify({"success": True, "saved": saved, "count": len(saved)})
