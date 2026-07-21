@@ -1,4 +1,5 @@
 """Per-site sitemap discovery and URL extraction."""
+import base64
 import gzip
 import io
 import time
