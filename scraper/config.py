@@ -12,10 +12,14 @@ BROWSER_CONTEXT_DIR = DATA_DIR / "browser_context"
 HEADLESS = os.environ.get("BOAT_SCRAPER_HEADLESS", "true").lower() == "true"
 BROWSER_TIMEOUT = int(os.environ.get("BOAT_SCRAPER_TIMEOUT", "30000"))
 NAVIGATION_TIMEOUT = int(os.environ.get("BOAT_SCRAPER_NAV_TIMEOUT", "60000"))
+CHALLENGE_TIMEOUT = int(os.environ.get("BOAT_SCRAPER_CHALLENGE_TIMEOUT", "30"))
+
+# Persistent browser session state
+BROWSER_STATE_FILE = BROWSER_CONTEXT_DIR / "state.json"
 
 # Rate limiting
-MIN_DELAY = float(os.environ.get("BOAT_SCRAPER_MIN_DELAY", "2.0"))
-MAX_DELAY = float(os.environ.get("BOAT_SCRAPER_MAX_DELAY", "8.0"))
+MIN_DELAY = float(os.environ.get("BOAT_SCRAPER_MIN_DELAY", "4.0"))
+MAX_DELAY = float(os.environ.get("BOAT_SCRAPER_MAX_DELAY", "12.0"))
 
 # Retry settings
 MAX_ATTEMPTS = int(os.environ.get("BOAT_SCRAPER_MAX_ATTEMPTS", "5"))

@@ -1,16 +1,22 @@
 """Browser management with stealth Playwright setup."""
+import time
+
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
 from scraper.config import (
     BROWSER_TIMEOUT,
     NAVIGATION_TIMEOUT,
+    HEADLESS,
+    BROWSER_CONTEXT_DIR,
+    BROWSER_STATE_FILE,
+    CHALLENGE_TIMEOUT,
 )
 
 
 class BoatBrowser:
     """Manages a stealth Playwright browser instance for BoatTrader scraping.
 
-    Uses real Google Chrome (channel='chrome') with --headless=new to avoid
-    Cloudflare detection that blocks Playwright's bundled headless_shell.
+    Uses Chromium with anti-detection flags, persistent storage state, and
+    a wait-and-retry loop for Cloudflare interstitials.
     """
 
     def __init__(self):
@@ -18,6 +24,8 @@ class BoatBrowser:
         self.browser: Browser | None = None
         self.context: BrowserContext | None = None
         self.page: Page | None = None
+        self._authenticated_ok = False
+        BROWSER_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
 
     def _is_challenge_page(self, page: Page) -> bool:
         """Detect if we're on a Cloudflare challenge/interstitial page."""
@@ -28,26 +36,47 @@ class BoatBrowser:
             "verify you are human",
             "ddos protection",
         ]
-        return any(t in title for t in challenge_titles)
+        if any(t in title for t in challenge_titles):
+            return True
+
+        try:
+            content = page.content().lower()
+        except Exception:
+            return False
+
+        challenge_markers = [
+            "performing security verification",
+            "just a moment",
+            "verify you are human",
+            "cf-turnstile",
+            "ray id",
+            "enable javascript and cookies to continue",
+        ]
+        return any(marker in content for marker in challenge_markers)
 
     def _launch_browser(self) -> None:
-        """Launch real Chrome in new headless mode."""
+        """Launch Chromium with stealth flags and persistent storage state."""
         self.playwright = sync_playwright().start()
 
         launch_args = [
             "--disable-blink-features=AutomationControlled",
             "--disable-web-security",
             "--disable-features=IsolateOrigins,site-per-process",
-            "--headless=new",
             "--no-sandbox",
         ]
 
         self.browser = self.playwright.chromium.launch(
-            headless=False,  # Required for --headless=new via args
+            headless=HEADLESS,
             args=launch_args,
         )
 
+        storage_state = None
+        if BROWSER_STATE_FILE.exists():
+            storage_state = str(BROWSER_STATE_FILE)
+            print(f"[browser] Restoring session state from {BROWSER_STATE_FILE}")
+
         self.context = self.browser.new_context(
+            storage_state=storage_state,
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
@@ -66,7 +95,8 @@ class BoatBrowser:
 
     def start(self) -> Page:
         """Start browser and verify it can access BoatTrader."""
-        print("[browser] Launching Chrome (headless=new)...")
+        self._authenticated_ok = False
+        print(f"[browser] Launching Chromium (headless={HEADLESS})...")
         self._launch_browser()
 
         print("[browser] Verifying access to BoatTrader...")
@@ -82,12 +112,31 @@ class BoatBrowser:
             raise
 
         if self._is_challenge_page(self.page):
-            print("[browser] WARNING: Cloudflare challenge still detected.")
-            self.shutdown()
-            raise RuntimeError(
-                "Cloudflare challenge could not be bypassed automatically."
+            print(
+                f"[browser] Cloudflare challenge detected; waiting up to "
+                f"{CHALLENGE_TIMEOUT}s for it to clear..."
             )
+            deadline = time.time() + CHALLENGE_TIMEOUT
+            cleared = False
+            while time.time() < deadline:
+                try:
+                    self.page.wait_for_timeout(2000)
+                    if not self._is_challenge_page(self.page):
+                        cleared = True
+                        print("[browser] Challenge cleared.")
+                        break
+                except Exception:
+                    # Page may be navigating; give it another cycle
+                    pass
 
+            if not cleared:
+                print("[browser] WARNING: Cloudflare challenge still detected.")
+                self.shutdown()
+                raise RuntimeError(
+                    "Cloudflare challenge could not be bypassed automatically."
+                )
+
+        self._authenticated_ok = True
         print("[browser] Browser ready.")
         return self.page
 
@@ -110,7 +159,13 @@ class BoatBrowser:
         return self.start()
 
     def shutdown(self) -> None:
-        """Cleanly shut down browser and context."""
+        """Cleanly shut down browser and context, saving session state."""
+        if self.context and self._authenticated_ok:
+            try:
+                self.context.storage_state(path=BROWSER_STATE_FILE)
+                print(f"[browser] Saved session state to {BROWSER_STATE_FILE}")
+            except Exception as e:
+                print(f"[browser] Failed to save session state: {e}")
         if self.context:
             try:
                 self.context.close()
@@ -130,6 +185,7 @@ class BoatBrowser:
                 pass
             self.playwright = None
         self.page = None
+        self._authenticated_ok = False
 
     def save_session(self) -> None:
         """Save current browser session state (no-op for now)."""
