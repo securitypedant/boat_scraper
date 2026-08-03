@@ -106,6 +106,16 @@ class BoatBrowser:
             pass
         return ", ".join(parts)
 
+    def _is_hard_blocked(self, page, response) -> bool:
+        """Detect a hard Cloudflare access-denied block that won't self-clear."""
+        if response is None or getattr(response, "status", None) != 403:
+            return False
+        try:
+            title = page.title().lower()
+        except Exception:
+            title = ""
+        return "access denied" in title or "forbidden" in title
+
     def start(self) -> Page:
         """Start browser and verify it can access BoatTrader."""
         self._authenticated_ok = False
@@ -127,6 +137,18 @@ class BoatBrowser:
             print(f"[browser] Navigation test failed: {e}")
             self.shutdown()
             raise
+
+        if self._is_hard_blocked(self.page, response):
+            print(
+                f"[browser] Hard Cloudflare block detected: "
+                f"{self._response_debug(response)}, "
+                f"title={self.page.title()[:80]!r}. "
+                f"This IP/ASN is likely flagged."
+            )
+            self.shutdown()
+            raise RuntimeError(
+                "Cloudflare hard block (IP/ASN likely flagged); try a different egress IP."
+            )
 
         if self._is_challenge_page(self.page):
             print(
