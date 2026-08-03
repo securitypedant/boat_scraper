@@ -93,6 +93,19 @@ class BoatBrowser:
         self.page.set_default_timeout(BROWSER_TIMEOUT)
         self.page.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
 
+    def _response_debug(self, response) -> str:
+        """Build a short debug string for a Playwright response."""
+        if response is None:
+            return "status=unknown"
+        parts = [f"status={response.status}"]
+        try:
+            ray = response.header_value("cf-ray")
+            if ray:
+                parts.append(f"cf-ray={ray}")
+        except Exception:
+            pass
+        return ", ".join(parts)
+
     def start(self) -> Page:
         """Start browser and verify it can access BoatTrader."""
         self._authenticated_ok = False
@@ -101,10 +114,14 @@ class BoatBrowser:
 
         print("[browser] Verifying access to BoatTrader...")
         try:
-            self.page.goto(
+            response = self.page.goto(
                 "https://www.boattrader.com/boats/",
                 wait_until="domcontentloaded",
                 timeout=30000,
+            )
+            print(
+                f"[browser] Startup response: {self._response_debug(response)}, "
+                f"title={self.page.title()[:80]!r}"
             )
         except Exception as e:
             print(f"[browser] Navigation test failed: {e}")
@@ -130,7 +147,11 @@ class BoatBrowser:
                     pass
 
             if not cleared:
-                print("[browser] WARNING: Cloudflare challenge still detected.")
+                print(
+                    "[browser] WARNING: Cloudflare challenge still detected. "
+                    f"Final title={self.page.title()[:80]!r}, "
+                    f"url={self.page.url[:120]}"
+                )
                 self.shutdown()
                 raise RuntimeError(
                     "Cloudflare challenge could not be bypassed automatically."

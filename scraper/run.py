@@ -243,6 +243,7 @@ def scrape(
         _page_recycle_every = 200
         _browser_recycle_every = 1500
         _since_last_recycle = 0
+        _consecutive_failed = 0
         # BoatTrader was already warmed by the startup check in BoatBrowser.start()
         warmed_sources: set[str] = {"BoatTrader"}
 
@@ -279,10 +280,22 @@ def scrape(
                 data = scrape_listing(page, url)
 
                 if data is None:
+                    _consecutive_failed += 1
                     _update_progress(db, url, "failed", "Challenge page or timeout")
+                    print(
+                        f"[run] No data for {listing_source} URL ("
+                        f"consecutive failures={_consecutive_failed}): {url}"
+                    )
+                    if _consecutive_failed >= 5:
+                        print(
+                            "[run] WARNING: 5+ consecutive failures. "
+                            "Likely IP/ASN flagged; consider moving to a different egress IP."
+                        )
                 elif not data.get("name") and not data.get("year"):
+                    _consecutive_failed += 1
                     _update_progress(db, url, "failed", "No title/year extracted")
                 else:
+                    _consecutive_failed = 0
                     _save_result(db, data)
                     _update_progress(db, url, "done")
                     # Log summary to live dashboard
@@ -292,8 +305,12 @@ def scrape(
                     print(f"[scrape] {source} | {name} | HIN: {hin}")
 
             except Exception as e:
+                _consecutive_failed += 1
                 error_str = str(e)
-                print(f"[run] Error scraping {url}: {error_str}")
+                print(
+                    f"[run] Error scraping {url}: {error_str} "
+                    f"(consecutive failures={_consecutive_failed})"
+                )
 
                 # Check attempts
                 cursor = db.execute(

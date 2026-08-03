@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 from bs4 import BeautifulSoup
-from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
+from playwright.sync_api import Page, Response, TimeoutError as PlaywrightTimeout
 
 from prescraper.uscg_prescraper import _clean_company, lookup_make
 
@@ -176,7 +176,21 @@ def _clean_numeric(val: str | None) -> str | None:
     return val
 
 
-def _is_blocked_page(page: Page) -> tuple[bool, str | None]:
+def _response_debug(response: Response | None) -> str:
+    """Return status code + cf-ray header for a Playwright response."""
+    if response is None:
+        return "status=unknown"
+    parts = [f"status={response.status}"]
+    try:
+        ray = response.header_value("cf-ray")
+        if ray:
+            parts.append(f"cf-ray={ray}")
+    except Exception:
+        pass
+    return ", ".join(parts)
+
+
+def _is_blocked_page(page: Page, response: Response | None = None) -> tuple[bool, str]:
     """Detect Cloudflare challenge or access-denied pages."""
     try:
         title = page.title().lower()
@@ -206,11 +220,14 @@ def _is_blocked_page(page: Page) -> tuple[bool, str | None]:
         "enable javascript and cookies to continue",
     ]
 
+    debug = _response_debug(response)
+    page_info = f"title={title.strip()[:80]!r}, {debug}, url={page.url[:120]}"
+
     if any(t in title for t in blocked_titles):
-        return True, f"blocked title: {title.strip() or 'empty'}"
+        return True, f"blocked title: {page_info}"
     if any(m in content for m in blocked_markers):
-        return True, "blocked content markers"
-    return False, None
+        return True, f"blocked content markers: {page_info}"
+    return False, f"ok: {page_info}"
 
 
 def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
@@ -218,8 +235,9 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
 
     Returns a dict with all requested fields, or None if the page is invalid.
     """
+    response = None
     try:
-        page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        response = page.goto(url, wait_until="domcontentloaded", timeout=30000)
     except PlaywrightTimeout:
         print(f"[scraper] Timeout loading {url}")
         return None
@@ -228,11 +246,12 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         return None
 
     # Check for Cloudflare challenge or hard access-denied page
-    blocked, reason = _is_blocked_page(page)
+    blocked, reason = _is_blocked_page(page, response)
     if blocked:
         print(f"[scraper] Blocked/challenge page at {url}: {reason}")
         return None
 
+    print(f"[scraper] Loaded {url}: {reason}")
     soup = BeautifulSoup(page.content(), "lxml")
     source = _detect_source(url)
 
