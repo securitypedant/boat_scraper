@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING
 from scraper.browser import BoatBrowser
 from scraper.config import MAX_ATTEMPTS, MIN_DELAY, MAX_DELAY
 from scraper.database import get_db, init_db
-from scraper.detail_scraper import scrape_listing
+from scraper.detail_scraper import scrape_listing, _detect_source
 from scraper.sitemap import discover_urls, SITE_MAPS
 
 if TYPE_CHECKING:
@@ -135,6 +135,31 @@ def _get_stats(db) -> dict:
     }
 
 
+_SOURCE_HOME_PAGES = {
+    "BoatTrader": "https://www.boattrader.com/",
+    "YachtWorld": "https://www.yachtworld.com/",
+    "BoatsDotCom": "https://www.boats.com/",
+}
+
+
+def _warm_source(page, source: str, warmed: set[str]) -> None:
+    """Visit a site's homepage once per browser session to seed cookies.
+
+    The startup check already warms BoatTrader, but YachtWorld and
+    Boats.com need their own domain warm-up before we hit detail pages.
+    """
+    if source in warmed or source not in _SOURCE_HOME_PAGES:
+        return
+    homepage = _SOURCE_HOME_PAGES[source]
+    print(f"[run] Warming {source} domain ({homepage})...")
+    try:
+        page.goto(homepage, wait_until="domcontentloaded", timeout=15000)
+        time.sleep(2)
+    except Exception as e:
+        print(f"[run] {source} domain warm failed: {e}")
+    warmed.add(source)
+
+
 def discover_only(page: Page, source: str | None = None, refresh: bool = False) -> list[str]:
     """Discover URLs from sitemaps without scraping them.
 
@@ -218,6 +243,8 @@ def scrape(
         _page_recycle_every = 200
         _browser_recycle_every = 1500
         _since_last_recycle = 0
+        # BoatTrader was already warmed by the startup check in BoatBrowser.start()
+        warmed_sources: set[str] = {"BoatTrader"}
 
         for i, url in enumerate(urls, 1):
             if is_stopped():
@@ -240,12 +267,15 @@ def scrape(
                 print(f"[browser] Full restart after {i} scrapes...")
                 browser.shutdown()
                 page = browser.start()
+                warmed_sources = {"BoatTrader"}  # start() warms BoatTrader
                 try:
                     page.goto(url, wait_until="domcontentloaded", timeout=15000)
                 except Exception:
                     pass
 
             try:
+                listing_source = _detect_source(url)
+                _warm_source(page, listing_source, warmed_sources)
                 data = scrape_listing(page, url)
 
                 if data is None:

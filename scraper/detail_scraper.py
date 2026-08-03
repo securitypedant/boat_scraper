@@ -176,6 +176,43 @@ def _clean_numeric(val: str | None) -> str | None:
     return val
 
 
+def _is_blocked_page(page: Page) -> tuple[bool, str | None]:
+    """Detect Cloudflare challenge or access-denied pages."""
+    try:
+        title = page.title().lower()
+    except Exception:
+        title = ""
+    try:
+        content = page.content().lower()
+    except Exception:
+        content = ""
+
+    blocked_titles = [
+        "just a moment",
+        "access denied",
+        "forbidden",
+        "blocked",
+        "security check",
+        "attention required",
+        "verify you are human",
+    ]
+    blocked_markers = [
+        "cf-turnstile",
+        "ray id",
+        "access denied",
+        "you have been blocked",
+        "performing security verification",
+        "please verify you are human",
+        "enable javascript and cookies to continue",
+    ]
+
+    if any(t in title for t in blocked_titles):
+        return True, f"blocked title: {title.strip() or 'empty'}"
+    if any(m in content for m in blocked_markers):
+        return True, "blocked content markers"
+    return False, None
+
+
 def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
     """Scrape a single boat listing page from any supported site.
 
@@ -190,13 +227,13 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         print(f"[scraper] Error navigating to {url}: {exc}")
         return None
 
-    # Check for challenge page
-    content_text = page.content()
-    if "performing security verification" in content_text.lower():
-        print(f"[scraper] Challenge page detected at {url}")
+    # Check for Cloudflare challenge or hard access-denied page
+    blocked, reason = _is_blocked_page(page)
+    if blocked:
+        print(f"[scraper] Blocked/challenge page at {url}: {reason}")
         return None
 
-    soup = BeautifulSoup(content_text, "lxml")
+    soup = BeautifulSoup(page.content(), "lxml")
     source = _detect_source(url)
 
     # Initialize all fields
