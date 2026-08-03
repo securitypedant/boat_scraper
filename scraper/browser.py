@@ -27,6 +27,8 @@ class BoatBrowser:
         self.context: BrowserContext | None = None
         self.page: Page | None = None
         self._authenticated_ok = False
+        self._loaded_state = False
+        self._cleared_state_for_retry = False
         BROWSER_CONTEXT_DIR.mkdir(parents=True, exist_ok=True)
 
     def _is_challenge_page(self, page: Page) -> bool:
@@ -84,8 +86,10 @@ class BoatBrowser:
         )
 
         storage_state = None
+        self._loaded_state = False
         if BROWSER_STATE_FILE.exists():
             storage_state = str(BROWSER_STATE_FILE)
+            self._loaded_state = True
             print(f"[browser] Restoring session state from {BROWSER_STATE_FILE}")
 
         self.context = self.browser.new_context(
@@ -160,6 +164,18 @@ class BoatBrowser:
             raise
 
         if self._is_hard_blocked(self.page, response):
+            if self._loaded_state and not self._cleared_state_for_retry:
+                print(
+                    "[browser] Hard block while restoring saved state; clearing state and retrying once."
+                )
+                try:
+                    BROWSER_STATE_FILE.unlink(missing_ok=True)
+                except Exception as e:
+                    print(f"[browser] Could not delete state file: {e}")
+                self._cleared_state_for_retry = True
+                self.shutdown()
+                return self.start()
+
             print(
                 f"[browser] Hard Cloudflare block detected: "
                 f"{self._response_debug(response)}, "
