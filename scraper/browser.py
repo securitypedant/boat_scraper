@@ -2,6 +2,8 @@
 import time
 
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
+from playwright_stealth.stealth import Stealth
+
 from scraper.config import (
     BROWSER_TIMEOUT,
     NAVIGATION_TIMEOUT,
@@ -62,11 +64,22 @@ class BoatBrowser:
             "--disable-blink-features=AutomationControlled",
             "--disable-web-security",
             "--disable-features=IsolateOrigins,site-per-process",
+            "--disable-dev-shm-usage",
+            "--disable-accelerated-2d-canvas",
+            "--disable-gpu",
+            "--no-first-run",
+            "--no-default-browser-check",
             "--no-sandbox",
         ]
 
+        # The original working setup used headless=False with --headless=new.
+        # This makes Chromium use its native new headless mode, which is
+        # significantly less detectable than Playwright's bundled headless_shell.
+        if HEADLESS:
+            launch_args.append("--headless=new")
+
         self.browser = self.playwright.chromium.launch(
-            headless=HEADLESS,
+            headless=False,
             args=launch_args,
         )
 
@@ -80,16 +93,24 @@ class BoatBrowser:
             user_agent=(
                 "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
                 "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0.0.0 Safari/537.36"
+                "Chrome/126.0.0.0 Safari/537.36"
             ),
             viewport={"width": 1920, "height": 1080},
             locale="en-US",
             timezone_id="America/Los_Angeles",
             permissions=["geolocation"],
             color_scheme="light",
+            extra_http_headers={
+                "Accept-Language": "en-US,en;q=0.9",
+                "Sec-Ch-Ua": '"Not/A)Brand";v="8", "Chromium";v="126", "Google Chrome";v="126"',
+                "Sec-Ch-Ua-Mobile": "?0",
+                "Sec-Ch-Ua-Platform": '"macOS"',
+                "Upgrade-Insecure-Requests": "1",
+            },
         )
 
         self.page = self.context.new_page()
+        Stealth().apply_stealth_sync(self.page)
         self.page.set_default_timeout(BROWSER_TIMEOUT)
         self.page.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
 
@@ -195,6 +216,7 @@ class BoatBrowser:
                 pass
         if self.context:
             self.page = self.context.new_page()
+            Stealth().apply_stealth_sync(self.page)
             self.page.set_default_timeout(BROWSER_TIMEOUT)
             self.page.set_default_navigation_timeout(NAVIGATION_TIMEOUT)
             return self.page
