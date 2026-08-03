@@ -8,6 +8,12 @@ DATA_DIR = PROJECT_ROOT / "data"
 DB_PATH = DATA_DIR / "boats.db"
 BROWSER_CONTEXT_DIR = DATA_DIR / "browser_context"
 
+# Per-source databases (legacy boats.db is the default for all other sources)
+SOURCE_DB_NAMES = {
+    "CarMax": "carmax.db",
+    "Carvana": "carvana.db",
+}
+
 # Browser settings
 HEADLESS = os.environ.get("BOAT_SCRAPER_HEADLESS", "true").lower() == "true"
 BROWSER_TIMEOUT = int(os.environ.get("BOAT_SCRAPER_TIMEOUT", "30000"))

@@ -6,6 +6,7 @@ const els = {
   lastScraped: document.getElementById('last-scraped'),
   lastAction: document.getElementById('last-action'),
   version: document.getElementById('version'),
+  logLevel: document.getElementById('log-level'),
   statTotal: document.getElementById('stat-total'),
   statManufacturers: document.getElementById('stat-manufacturers'),
   statPending: document.getElementById('stat-pending'),
@@ -116,6 +117,29 @@ function appendLog(line) {
   }
 }
 
+// --- Log level ---
+async function loadLogLevel() {
+  try {
+    const res = await fetch('/api/log-level');
+    const data = await res.json();
+    if (els.logLevel) els.logLevel.value = data.level || 'STANDARD';
+  } catch (e) {
+    dbg('Could not load log level: ' + e.message);
+  }
+}
+
+if (els.logLevel) {
+  els.logLevel.addEventListener('change', async () => {
+    const level = els.logLevel.value;
+    try {
+      await fetch('/api/log-level', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({level}) });
+      showToast('Log level set to ' + level);
+    } catch (e) {
+      uiErr('Failed to set log level: ' + e.message);
+    }
+  });
+}
+
 // --- Status Polling ---
 let _lastPrescrapeRunning = false;
 let _lastScraperRunning = false;
@@ -220,12 +244,13 @@ els.btnStart.addEventListener('click', async () => {
   dbg('Start Scraping clicked');
   els.btnStart.disabled = true;
   setLastAction('Starting scraper…');
+  const source = document.getElementById('scrape-source').value || null;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source}) });
     const data = await res.json();
     dbg('start response: ' + JSON.stringify(data));
     if (data.success) {
-      showToast('Scraper started');
+      showToast('Scraper started' + (source ? ' for ' + source : ''));
     } else {
       showToast('Scraper already running', 'error');
     }
@@ -238,12 +263,13 @@ els.btnTest.addEventListener('click', async () => {
   dbg('Test Run (5) clicked');
   els.btnTest.disabled = true;
   setLastAction('Starting test run (5 URLs)…');
+  const source = document.getElementById('scrape-source').value || null;
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5}) });
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5, source: source}) });
     const data = await res.json();
     dbg('test response: ' + JSON.stringify(data));
     if (data.success) {
-      showToast('Test run started (5 URLs)');
+      showToast('Test run started (5 URLs)' + (source ? ' for ' + source : ''));
     } else {
       showToast('Already running', 'error');
     }
@@ -723,6 +749,7 @@ if (els.btnDeleteAll) {
 // Poll status every 2 seconds
 setInterval(updateStatus, 2000);
 updateStatus();
+loadLogLevel();
 
 // Fetch version once on load
 (async function fetchVersion() {

@@ -169,6 +169,24 @@ def status():
     return jsonify(manager.get_status())
 
 
+@app.route("/api/sources")
+def list_sources():
+    from scraper.config import SOURCE_DB_NAMES
+    return jsonify({
+        "sources": ["BoatTrader", "YachtWorld", "BoatsDotCom"] + list(SOURCE_DB_NAMES.keys()),
+    })
+
+
+@app.route("/api/log-level", methods=["GET", "POST"])
+def log_level():
+    if request.method == "POST":
+        data = request.get_json(silent=True) or {}
+        level = data.get("level", "STANDARD")
+        ok = manager.set_log_level(level)
+        return jsonify({"success": ok, "level": manager.get_log_level()})
+    return jsonify({"level": manager.get_log_level()})
+
+
 @app.route("/api/logs")
 def logs():
     """Server-Sent Events stream of log lines."""

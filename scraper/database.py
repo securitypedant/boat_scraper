@@ -2,7 +2,7 @@
 import sqlite3
 from pathlib import Path
 
-from scraper.config import DB_PATH, DATA_DIR
+from scraper.config import DB_PATH, DATA_DIR, SOURCE_DB_NAMES
 
 MIGRATIONS = [
     # Migration 1: Initial schema
@@ -72,17 +72,83 @@ MIGRATIONS = [
     """,
 ]
 
+CAR_MIGRATIONS = [
+    """
+    CREATE TABLE IF NOT EXISTS cars (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        vin TEXT,
+        year INTEGER,
+        make TEXT,
+        model TEXT,
+        trim TEXT,
+        exterior_color TEXT,
+        engine TEXT,
+        transmission TEXT,
+        fuel_type TEXT,
+        length TEXT,
+        width TEXT,
+        height TEXT,
+        wheel_size TEXT,
+        tire_size TEXT,
+        interior_color TEXT,
+        interior_trim TEXT,
+        source_site TEXT,
+        url TEXT,
+        scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_cars_vin ON cars(vin);
+    CREATE INDEX IF NOT EXISTS idx_cars_ymm ON cars(year, make, model);
 
-def init_db() -> sqlite3.Connection:
+    CREATE TABLE IF NOT EXISTS progress (
+        url TEXT PRIMARY KEY,
+        status TEXT CHECK(status IN ('pending','done','failed')) DEFAULT 'pending',
+        error_msg TEXT,
+        attempts INTEGER DEFAULT 0,
+        last_attempt_at DATETIME
+    );
+    CREATE INDEX IF NOT EXISTS idx_progress_status ON progress(status);
+
+    CREATE TABLE IF NOT EXISTS specs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        year INTEGER,
+        make TEXT,
+        model TEXT,
+        trim TEXT,
+        length TEXT,
+        width TEXT,
+        height TEXT,
+        wheel_size TEXT,
+        tire_size TEXT,
+        source_site TEXT,
+        scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(year, make, model, trim)
+    );
+    CREATE INDEX IF NOT EXISTS idx_specs_ymm ON specs(year, make, model);
+    """,
+]
+
+
+def _db_path_for_source(source: str | None = None) -> Path:
+    """Return the DB path for a source, defaulting to the legacy boats DB."""
+    if source and source in SOURCE_DB_NAMES:
+        return DATA_DIR / SOURCE_DB_NAMES[source]
+    return DB_PATH
+
+
+def init_db(source: str | None = None) -> sqlite3.Connection:
     """Initialize the SQLite database with schema and migrations."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(str(DB_PATH))
-    _run_migrations(conn)
+    db_path = _db_path_for_source(source)
+    conn = sqlite3.connect(str(db_path))
+    _run_migrations(conn, source=source)
     return conn
 
 
-def _run_migrations(conn: sqlite3.Connection) -> None:
+def _run_migrations(conn: sqlite3.Connection, source: str | None = None) -> None:
     """Run migrations that haven't been applied yet."""
+    is_car = source in SOURCE_DB_NAMES
+    migrations = CAR_MIGRATIONS if is_car else MIGRATIONS
+
     # Create migration tracking table
     conn.execute("""
         CREATE TABLE IF NOT EXISTS __migrations (
@@ -91,7 +157,7 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
         )
     """)
 
-    for i, sql in enumerate(MIGRATIONS, start=1):
+    for i, sql in enumerate(migrations, start=1):
         cursor = conn.execute(
             "SELECT 1 FROM __migrations WHERE version = ?", (i,)
         )
@@ -101,13 +167,14 @@ def _run_migrations(conn: sqlite3.Connection) -> None:
                 "INSERT INTO __migrations (version) VALUES (?)", (i,)
             )
             conn.commit()
-            print(f"[db] Applied migration {i}")
+            print(f"[db] Applied migration {i} for {source or 'boats'}")
 
 
-def get_db() -> sqlite3.Connection:
+def get_db(source: str | None = None) -> sqlite3.Connection:
     """Get a database connection (initializing if needed)."""
-    if not DB_PATH.exists():
-        return init_db()
-    conn = sqlite3.connect(str(DB_PATH))
-    _run_migrations(conn)
+    db_path = _db_path_for_source(source)
+    if not db_path.exists():
+        return init_db(source)
+    conn = sqlite3.connect(str(db_path))
+    _run_migrations(conn, source=source)
     return conn

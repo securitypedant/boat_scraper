@@ -1,6 +1,11 @@
-# BoatTrader Scraper
+# Vehicle Data Scraper
 
-A stealth Playwright-based scraper that extracts boat data from [BoatTrader](https://www.boattrader.com) and stores it in SQLite.
+A stealth Playwright-based scraper that extracts vehicle data from multiple sources and stores it in per-source SQLite databases.
+
+Currently supports:
+- [BoatTrader](https://www.boattrader.com), [YachtWorld](https://www.yachtworld.com), [Boats.com](https://www.boats.com) (boats) → `data/boats.db`
+- [CarMax](https://www.carmax.com) → `data/carmax.db`
+- [Carvana](https://www.carvana.com) → `data/carvana.db`
 
 ## Fields Extracted
 

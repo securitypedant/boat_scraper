@@ -6,11 +6,21 @@ import traceback
 from datetime import datetime, timezone
 
 from prescraper.uscg_prescraper import run_prescrape as uscg_prescrape
+from scraper.config import SOURCE_DB_NAMES
 from scraper.database import get_db
 from scraper.run import discover_only, scrape
+from scraper.car_runner import scrape as car_scrape
+from scraper.cars import carmax, carvana
+from scraper import logger
 from scraper.browser import BoatBrowser
 
 from web.log_buffer import LogBuffer
+
+
+CAR_SOURCE_MODULES = {
+    "CarMax": carmax,
+    "Carvana": carvana,
+}
 
 
 class ScraperManager:
@@ -64,8 +74,8 @@ class ScraperManager:
     def _log(self, msg: str) -> None:
         self.log_buffer.write(f"[manager] {msg}")
 
-    def start(self, limit: int | None = None, retry_failed: bool = False, source: str | None = None) -> bool:
-        """Start the boat scraper in a background thread."""
+    def start(self, limit: int | None = None, retry_failed: bool = False, source: str | None = None, run_discovery: bool = False) -> bool:
+        """Start the vehicle scraper in a background thread."""
         self._log(f"start() called: limit={limit} retry_failed={retry_failed} source={source}")
         if self.scraper_running:
             self._log("start() rejected: scraper already running")
@@ -74,11 +84,19 @@ class ScraperManager:
         self._stop_event.clear()
         self._stop_requested = False
         self._start_time = datetime.now(timezone.utc)
-        self._scraper_thread = threading.Thread(
-            target=self._run_scraper,
-            args=(limit, retry_failed, source),
-            daemon=True,
-        )
+
+        if source in SOURCE_DB_NAMES:
+            self._scraper_thread = threading.Thread(
+                target=self._run_car_scraper,
+                args=(source, limit, retry_failed),
+                daemon=True,
+            )
+        else:
+            self._scraper_thread = threading.Thread(
+                target=self._run_scraper,
+                args=(limit, retry_failed, source),
+                daemon=True,
+            )
         self._scraper_thread.start()
         self._log("start() accepted: scraper thread started")
         return True
@@ -127,6 +145,20 @@ class ScraperManager:
         self._log("prescrape() accepted: prescraper thread started")
         return True
 
+    def set_log_level(self, level: str) -> bool:
+        """Set the global log level (DEBUG, STANDARD, QUIET)."""
+        try:
+            logger.set_log_level(level)
+            self._log(f"Log level set to {level}")
+            return True
+        except Exception as exc:
+            self._log(f"Failed to set log level: {exc}")
+            return False
+
+    def get_log_level(self) -> str:
+        """Return the current log level name."""
+        return logger.get_log_level().name
+
     def _redirect_stdout(self, target):
         """Redirect stdout through target callable while running."""
         self._log("Redirecting stdout to log buffer...")
@@ -159,17 +191,40 @@ class ScraperManager:
         self._log("--- scraper thread finished ---")
         self._start_time = None
 
+    def _run_car_scraper(self, source: str, limit: int | None, retry_failed: bool) -> None:
+        self._log(f"--- car scraper thread started ({source}) ---")
+
+        def run():
+            self._log(f"Entering car_scrape(source={source})...")
+            car_scrape(
+                source=source,
+                limit=limit,
+                retry_failed=retry_failed,
+                stop_event=self._stop_event,
+                discover=True,
+            )
+            self._log("car_scrape() returned normally")
+
+        self._redirect_stdout(run)
+        self._log("--- car scraper thread finished ---")
+        self._start_time = None
+
     def _run_discover(self, source: str | None, refresh: bool) -> None:
         self._log("--- discover thread started ---")
 
         def run():
-            self._log("Entering discover_only()...")
+            self._log("Entering discovery...")
             try:
                 with BoatBrowser() as browser:
-                    discover_only(browser.page, source=source, refresh=refresh)
+                    if source in SOURCE_DB_NAMES:
+                        module = CAR_SOURCE_MODULES[source]
+                        db = get_db(source)
+                        module.discover_urls(browser.page, db=db, refresh=refresh)
+                    else:
+                        discover_only(browser.page, source=source, refresh=refresh)
             except Exception:
                 traceback.print_exc()
-            self._log("discover_only() returned")
+            self._log("discovery returned")
 
         self._redirect_stdout(run)
         self._log("--- discover thread finished ---")

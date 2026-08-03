@@ -10,6 +10,7 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import Page, Response, TimeoutError as PlaywrightTimeout
 
 from prescraper.uscg_prescraper import _clean_company, lookup_make
+from scraper.logger import LogLevel, log
 
 
 def _detect_source(url: str) -> str:
@@ -251,7 +252,7 @@ def scrape_listing(page: Page, url: str) -> dict[str, Any] | None:
         print(f"[scraper] Blocked/challenge page at {url}: {reason}")
         return None
 
-    print(f"[scraper] Loaded {url}: {reason}")
+    log(LogLevel.DEBUG, f"[scraper] Loaded {url}: {reason}")
     soup = BeautifulSoup(page.content(), "lxml")
     source = _detect_source(url)
 
