@@ -2,7 +2,9 @@
 import json
 import sqlite3
 import subprocess
+import threading
 import time
+import traceback
 from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlparse
@@ -10,16 +12,18 @@ from urllib.parse import urlparse
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
 from query.database import build_delete_query, build_query, get_db
-from scraper.config import DB_PATH
+from scraper.config import DB_PATH, SOURCE_DB_NAMES
 from scraper.sitemap import SITE_MAPS
 from web.log_buffer import LogBuffer, setup_logging
 from web.scraper_manager import ScraperManager
+from web.scheduler import ScheduleManager
 
 app = Flask(__name__)
 
 log_buffer = LogBuffer()
 logger = setup_logging(log_buffer)
 manager = ScraperManager(log_buffer)
+scheduler = ScheduleManager(manager, log_buffer)
 
 # In-memory rate limiter for /api/sitemap-urls
 _sitemap_url_last = {}
@@ -54,15 +58,49 @@ def start_scraper():
     limit = data.get("limit")
     retry_failed = data.get("retry_failed", False)
     source = data.get("source")  # e.g. "BoatTrader", "YachtWorld", "BoatsDotCom"
+    mode = data.get("mode", "scrape")  # discover_only, scrape, discover_and_scrape
+    schedule_enabled = data.get("schedule_enabled", False)
+    schedule_minutes = int(data.get("schedule_minutes", 10080))
 
     if limit is not None:
         limit = int(limit)
 
+    def _start():
+        if mode == "discover_only":
+            return manager.discover(source=source, refresh=False)
+        if mode == "discover_and_scrape":
+            if source in SOURCE_DB_NAMES:
+                # Car sources discover internally before scraping.
+                return manager.start(source=source, limit=limit, retry_failed=retry_failed)
+            # Boat sources: launch an orchestrator thread that waits for
+            # discovery to finish before scraping begins.
+            if not manager.discover(source=source, refresh=False):
+                return False
+
+            def _orchestrate():
+                for _ in range(360):  # up to 30 minutes
+                    if not manager.discover_running(source):
+                        break
+                    time.sleep(5)
+                manager.start(source=source, limit=limit, retry_failed=retry_failed)
+
+            threading.Thread(target=_orchestrate, daemon=True).start()
+            return True
+        return manager.start(source=source, limit=limit, retry_failed=retry_failed)
+
     try:
-        ok = manager.start(limit=limit, retry_failed=retry_failed, source=source)
-        log_buffer.write(f"[dashboard] manager.start() returned {ok}, source={source}")
+        ok = _start()
+        log_buffer.write(f"[dashboard] manager.start() returned {ok}, source={source}, mode={mode}")
+        if ok and schedule_enabled:
+            scheduler.add_or_update(
+                source or "AllBoatSites",
+                action="discover_and_scrape",
+                minutes=schedule_minutes,
+                enabled=True,
+            )
     except Exception as exc:
         log_buffer.write(f"[dashboard] manager.start() ERROR: {exc}")
+        traceback.print_exc()
         ok = False
 
     return jsonify({"success": ok, "running": manager.is_running})
@@ -71,7 +109,10 @@ def start_scraper():
 @app.route("/api/stop", methods=["POST"])
 def stop_scraper():
     log_buffer.write("[dashboard] POST /api/stop received")
-    ok = manager.stop()
+    data = request.get_json(silent=True) or {}
+    source = data.get("source")
+    all_sources = data.get("all", False)
+    ok = manager.stop(source=source, all_sources=all_sources)
     log_buffer.write(f"[dashboard] manager.stop() returned {ok}")
     return jsonify({"success": ok, "running": manager.is_running})
 
@@ -185,6 +226,30 @@ def log_level():
         ok = manager.set_log_level(level)
         return jsonify({"success": ok, "level": manager.get_log_level()})
     return jsonify({"level": manager.get_log_level()})
+
+
+@app.route("/api/schedules", methods=["GET"])
+def list_schedules():
+    return jsonify({"success": True, "schedules": scheduler.list_jobs()})
+
+
+@app.route("/api/schedules", methods=["POST"])
+def add_schedule():
+    data = request.get_json(silent=True) or {}
+    source = data.get("source") or ""
+    if not source:
+        return jsonify({"success": False, "error": "source is required"}), 400
+    action = data.get("action", "discover_and_scrape")
+    minutes = data.get("minutes", 60)
+    enabled = data.get("enabled", True)
+    ok = scheduler.add_or_update(source, action=str(action), minutes=int(minutes), enabled=bool(enabled))
+    return jsonify({"success": ok})
+
+
+@app.route("/api/schedules/<source>/<action>", methods=["DELETE"])
+def delete_schedule(source, action):
+    ok = scheduler.remove(source, action)
+    return jsonify({"success": ok})
 
 
 @app.route("/api/logs")
@@ -490,6 +555,12 @@ def get_version():
     if version_path.exists():
         version = version_path.read_text().strip()
     return jsonify({"version": version})
+
+
+# Start the APScheduler background scheduler when the app module loads.
+# This is safe with a single Gunicorn worker; multiple workers would require
+# scheduling only in a dedicated worker or via an external scheduler.
+scheduler.init()
 
 
 if __name__ == "__main__":

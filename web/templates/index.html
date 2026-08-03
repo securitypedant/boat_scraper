@@ -37,30 +37,37 @@
   </div>
 </div>
 
-<!-- Controls -->
+<!-- Add Scraper -->
 <div class="panel">
-  <h2>Controls</h2>
-
-  <!-- Row 1: Main workflow actions -->
-  <div class="controls" style="margin-bottom:8px;">
-    <button id="btn-discover" class="btn btn-primary">Pull Index</button>
-    <button id="btn-start" class="btn btn-primary">Start Scraping</button>
-    <button id="btn-stop" class="btn btn-danger" disabled>Stop</button>
-    <button id="btn-test" class="btn btn-primary">Test Run (5)</button>
-  </div>
-
-  <!-- Row 2: Site selector + log level + options -->
-  <div class="controls" style="margin-bottom:12px;">
+  <h2>Add Scraper</h2>
+  <div class="controls" style="flex-wrap:wrap;">
     <div style="display:flex;align-items:center;gap:6px;">
-      <label style="color:var(--muted);font-size:.85rem;">Site:</label>
+      <label style="color:var(--muted);font-size:.85rem;">Source:</label>
       <select id="scrape-source" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:.9rem;cursor:pointer;">
-        <option value="">All Sites</option>
+        <option value="">All Boat Sites</option>
         <option value="BoatTrader">BoatTrader</option>
         <option value="YachtWorld">YachtWorld</option>
         <option value="BoatsDotCom">Boats.com</option>
         <option value="CarMax">CarMax</option>
         <option value="Carvana">Carvana</option>
       </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="color:var(--muted);font-size:.85rem;">Action:</label>
+      <select id="scrape-action" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);font-size:.9rem;cursor:pointer;">
+        <option value="discover_and_scrape">Discover + Scrape</option>
+        <option value="discover_only">Discover only</option>
+        <option value="scrape">Scrape only</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="color:var(--muted);font-size:.85rem;">Schedule:</label>
+      <input type="number" id="schedule-interval" value="10080" min="15" style="width:80px;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+      <span style="color:var(--muted);font-size:.85rem;">min</span>
+      <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer;margin-left:4px;">
+        <input type="checkbox" id="cb-schedule" style="accent-color:var(--accent);">
+        On
+      </label>
     </div>
     <div style="display:flex;align-items:center;gap:6px;margin-left:12px;">
       <label style="color:var(--muted);font-size:.85rem;">Logs:</label>
@@ -70,13 +77,23 @@
         <option value="QUIET">Quiet</option>
       </select>
     </div>
-    <label style="display:flex;align-items:center;gap:4px;color:var(--muted);font-size:.85rem;cursor:pointer;margin-left:8px;">
-      <input type="checkbox" id="cb-refresh" style="accent-color:var(--accent);">
-      Force re-download
-    </label>
     <div style="flex:1"></div>
-    <button id="btn-retry" class="btn btn-primary">Retry Failed</button>
+    <button id="btn-start" class="btn btn-primary">Start</button>
+    <button id="btn-stop-all" class="btn btn-danger">Stop All</button>
   </div>
+</div>
+
+<!-- Active Sources -->
+<div class="panel">
+  <h2>Active Sources</h2>
+  <div id="source-cards" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:12px;">
+    <div style="color:var(--muted);font-size:.9rem;">Loading sources...</div>
+  </div>
+</div>
+
+<!-- Global Maintenance -->
+<div class="panel">
+  <h2>Maintenance</h2>
 
   <!-- Row 3: Sitemap management -->
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
@@ -120,6 +137,29 @@
       <div id="prescrape-bar" style="width:0%;height:100%;background:var(--success);transition:width .5s;"></div>
     </div>
   </div>
+</div>
+
+<!-- Schedules -->
+<div class="panel">
+  <h2>Scheduled Runs</h2>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px;">
+    <select id="schedule-source" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);">
+      <option value="BoatTrader">BoatTrader</option>
+      <option value="YachtWorld">YachtWorld</option>
+      <option value="BoatsDotCom">Boats.com</option>
+      <option value="CarMax">CarMax</option>
+      <option value="Carvana">Carvana</option>
+    </select>
+    <select id="schedule-action" class="btn" style="padding:10px 14px;background:var(--bg);border:1px solid var(--border);color:var(--text);">
+      <option value="discover_and_scrape">Discover + Scrape</option>
+      <option value="discover">Discover only</option>
+      <option value="scrape">Scrape only</option>
+    </select>
+    <input type="number" id="schedule-minutes" value="360" min="15" style="width:80px;padding:10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">
+    <span style="color:var(--muted);font-size:.85rem;">minutes</span>
+    <button id="btn-add-schedule" class="btn btn-primary">Add / Update</button>
+  </div>
+  <div id="schedules-list" style="font-size:.85rem;color:var(--muted);">Loading schedules...</div>
 </div>
 
 <!-- Logs -->

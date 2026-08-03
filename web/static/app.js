@@ -12,20 +12,27 @@ const els = {
   statPending: document.getElementById('stat-pending'),
   statDone: document.getElementById('stat-done'),
   statFailed: document.getElementById('stat-failed'),
-  btnDiscover: document.getElementById('btn-discover'),
+  scrapeSource: document.getElementById('scrape-source'),
+  scrapeAction: document.getElementById('scrape-action'),
+  scheduleInterval: document.getElementById('schedule-interval'),
+  cbSchedule: document.getElementById('cb-schedule'),
   btnStart: document.getElementById('btn-start'),
-  btnTest: document.getElementById('btn-test'),
-  btnStop: document.getElementById('btn-stop'),
+  btnStopAll: document.getElementById('btn-stop-all'),
   btnPrescrape: document.getElementById('btn-prescrape'),
   btnWipe: document.getElementById('btn-wipe'),
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
-  btnRetry: document.getElementById('btn-retry'),
   btnDownload: document.getElementById('btn-download'),
   btnDeleteAll: document.getElementById('btn-delete-all'),
+  sourceCards: document.getElementById('source-cards'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
   queryTotal: document.getElementById('query-total'),
   btnQuery: document.getElementById('btn-query'),
+  scheduleSource: document.getElementById('schedule-source'),
+  scheduleAction: document.getElementById('schedule-action'),
+  scheduleMinutes: document.getElementById('schedule-minutes'),
+  btnAddSchedule: document.getElementById('btn-add-schedule'),
+  schedulesList: document.getElementById('schedules-list'),
 };
 
 // Progress bar elements
@@ -140,24 +147,160 @@ if (els.logLevel) {
   });
 }
 
-// --- Status Polling ---
-let _lastPrescrapeRunning = false;
-let _lastScraperRunning = false;
-let _lastDiscoverRunning = false;
+// --- Schedules ---
+async function loadSchedules() {
+  try {
+    const res = await fetch('/api/schedules');
+    const data = await res.json();
+    if (!data.success) return;
+    const list = data.schedules;
+    if (!list || list.length === 0) {
+      if (els.schedulesList) els.schedulesList.innerHTML = '<div style="color:var(--muted);">No schedules configured.</div>';
+      return;
+    }
+    let html = '<div style="display:flex;flex-direction:column;gap:6px;">';
+    for (const s of list) {
+      const next = s.next_run ? new Date(s.next_run).toLocaleString() : 'not scheduled';
+      html += `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px;background:var(--bg);border:1px solid var(--border);border-radius:6px;">
+        <div><strong>${s.source}</strong> — ${s.action.replace(/_/g, ' ')} every ${s.minutes} min <span style="color:var(--muted)">(next: ${next})</span></div>
+        <button class="btn btn-danger" style="font-size:.75rem;padding:4px 10px;" onclick="deleteSchedule('${s.source}', '${s.action}')">Delete</button>
+      </div>`;
+    }
+    html += '</div>';
+    if (els.schedulesList) els.schedulesList.innerHTML = html;
+  } catch (e) {
+    dbg('Could not load schedules: ' + e.message);
+  }
+}
 
+window.deleteSchedule = async function(source, action) {
+  try {
+    const res = await fetch(`/api/schedules/${source}/${action}`, { method: 'DELETE' });
+    const data = await res.json();
+    if (data.success) {
+      showToast(`Removed schedule ${source}/${action}`);
+      loadSchedules();
+    } else {
+      showToast('Failed to remove schedule', 'error');
+    }
+  } catch (e) {
+    uiErr('DELETE schedule failed: ' + e.message);
+  }
+};
+
+if (els.btnAddSchedule) {
+  els.btnAddSchedule.addEventListener('click', async () => {
+    const source = els.scheduleSource.value;
+    const action = els.scheduleAction.value;
+    const minutes = parseInt(els.scheduleMinutes.value) || 60;
+    try {
+      const res = await fetch('/api/schedules', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source, action, minutes })
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast(`Scheduled ${source} ${action.replace(/_/g, ' ')} every ${minutes} min`);
+        loadSchedules();
+      } else {
+        showToast('Failed to add schedule', 'error');
+      }
+    } catch (e) {
+      uiErr('POST schedule failed: ' + e.message);
+    }
+  });
+}
+
+// --- Source helpers ---
+const SOURCE_NAMES = {
+  'AllBoatSites': 'All Boat Sites',
+  'BoatTrader': 'BoatTrader',
+  'YachtWorld': 'YachtWorld',
+  'BoatsDotCom': 'Boats.com',
+  'CarMax': 'CarMax',
+  'Carvana': 'Carvana',
+};
+
+let _schedules = [];
+let _lastRunningKeys = [];
+let _lastPrescrapeRunning = false;
+
+function formatUptime(seconds) {
+  if (!seconds && seconds !== 0) return '';
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  const s = Math.floor(seconds % 60);
+  if (h > 0) return `${h}h ${m}m`;
+  return `${m}m ${s}s`;
+}
+
+// --- Source actions ---
+window.discoverSource = async function(source, refresh = false) {
+  dbg('Discover ' + source);
+  setLastAction('Pulling index for ' + (SOURCE_NAMES[source] || source));
+  try {
+    const res = await fetch('/api/discover', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source === 'AllBoatSites' ? '' : source, refresh: refresh}) });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Pulling index for ' + (SOURCE_NAMES[source] || source));
+    } else {
+      showToast('Discovery already running for ' + source, 'error');
+    }
+  } catch (e) {
+    uiErr('POST /api/discover failed: ' + e.message);
+  }
+};
+
+window.startSource = async function(source, limit = null) {
+  dbg('Start ' + source);
+  setLastAction('Starting scraper for ' + (SOURCE_NAMES[source] || source));
+  try {
+    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source === 'AllBoatSites' ? '' : source, limit: limit, mode: 'scrape'}) });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Scraper started for ' + (SOURCE_NAMES[source] || source));
+    } else {
+      showToast('Scraper already running for ' + source, 'error');
+    }
+  } catch (e) {
+    uiErr('POST /api/start failed: ' + e.message);
+  }
+};
+
+window.stopSource = async function(source) {
+  dbg('Stop ' + source);
+  setLastAction('Stopping ' + (SOURCE_NAMES[source] || source));
+  try {
+    const res = await fetch('/api/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source === 'AllBoatSites' ? '' : source}) });
+    const data = await res.json();
+    if (data.success) {
+      showToast('Stop signal sent to ' + (SOURCE_NAMES[source] || source));
+    } else {
+      showToast(source + ' not running', 'error');
+    }
+  } catch (e) {
+    uiErr('POST /api/stop failed: ' + e.message);
+  }
+};
+
+// --- Status Polling ---
 async function updateStatus() {
   try {
-    const res = await fetch('/api/status');
-    const data = await res.json();
-    dbg('status: running=' + data.running + ' scraper=' + data.scraper_running + ' prescraper=' + data.prescraper_running);
+    const [statusRes, schedRes] = await Promise.all([
+      fetch('/api/status'),
+      fetch('/api/schedules'),
+    ]);
+    const data = await statusRes.json();
+    const schedData = await schedRes.json();
+    _schedules = schedData.success ? (schedData.schedules || []) : [];
 
-    els.statusDot.className = 'dot ' + (data.running ? 'running' : 'stopped');
-    if (data.stop_requested && data.scraper_running) {
-      els.statusText.textContent = 'Stopping…';
-      setLastAction('Stop requested, waiting for current page to finish…', 0);
-    } else {
-      els.statusText.textContent = data.running ? 'Running' : 'Stopped';
-    }
+    const anythingRunning = data.running;
+    const runningKeys = data.running_sources || [];
+
+    const anyStopRequested = data.stop_requested && Object.values(data.stop_requested).some(Boolean);
+    els.statusDot.className = 'dot ' + (anythingRunning ? 'running' : 'stopped');
+    els.statusText.textContent = anythingRunning ? (anyStopRequested ? 'Stopping…' : 'Running') : 'Stopped';
 
     els.statTotal.textContent = data.total_boats || 0;
     els.statManufacturers.textContent = data.total_manufacturers || 0;
@@ -166,9 +309,7 @@ async function updateStatus() {
     els.statFailed.textContent = data.failed || 0;
 
     if (data.uptime_seconds) {
-      const m = Math.floor(data.uptime_seconds / 60);
-      const s = Math.floor(data.uptime_seconds % 60);
-      els.uptime.textContent = `Uptime: ${m}m ${s}s`;
+      els.uptime.textContent = `Uptime: ${formatUptime(data.uptime_seconds)}`;
     } else {
       els.uptime.textContent = '';
     }
@@ -188,110 +329,115 @@ async function updateStatus() {
       prescrapeProgress.style.display = 'none';
     }
 
-    const anythingRunning = data.scraper_running || data.discover_running || data.prescraper_running;
+    renderSourceCards(data.sources || {}, runningKeys);
+    loadSchedules();
 
-    els.btnDiscover.disabled = anythingRunning;
-    els.btnStart.disabled = anythingRunning;
-    els.btnTest.disabled = anythingRunning;
-    els.btnStop.disabled = !data.scraper_running && !data.discover_running;
-    els.btnPrescrape.disabled = anythingRunning;
-    els.btnWipe.disabled = anythingRunning;
-    els.btnWipeMfrs.disabled = anythingRunning;
+    const prevRunningKeys = _lastRunningKeys;
+    const finishedKeys = prevRunningKeys.filter(k => !runningKeys.includes(k));
+    for (const k of finishedKeys) {
+      showToast((SOURCE_NAMES[k] || k) + ' finished!', 'success');
+    }
+    _lastRunningKeys = runningKeys;
 
-    // Detect transitions for toast notifications
     if (_lastPrescrapeRunning && !data.prescraper_running) {
       showToast('Prescraper finished!', 'success');
       setLastAction('Prescraper complete');
     }
-    if (_lastScraperRunning && !data.scraper_running) {
-      showToast('Scraper finished!', 'success');
-      setLastAction('Scraper complete');
-    }
-    if (_lastDiscoverRunning && !data.discover_running) {
-      showToast('Index pull finished!', 'success');
-      setLastAction('Index pull complete');
-    }
     _lastPrescrapeRunning = data.prescraper_running;
-    _lastScraperRunning = data.scraper_running;
-    _lastDiscoverRunning = data.discover_running;
+
+    els.btnPrescrape.disabled = anythingRunning;
+    els.btnWipe.disabled = anythingRunning;
+    els.btnWipeMfrs.disabled = anythingRunning;
 
   } catch (e) {
     uiErr('Status poll failed: ' + e.message);
   }
 }
 
-// --- Controls ---
-els.btnDiscover.addEventListener('click', async () => {
-  dbg('Pull Index clicked');
-  setLastAction('Pulling sitemap index…');
-  const source = document.getElementById('scrape-source').value;
-  const refresh = document.getElementById('cb-refresh').checked;
-  try {
-    const res = await fetch('/api/discover', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source || null, refresh: refresh}) });
-    const data = await res.json();
-    dbg('discover response: ' + JSON.stringify(data));
-    if (data.success) {
-      showToast('Pulling index for ' + (source || 'All Sites') + (refresh ? ' (refresh)' : ''));
-    } else {
-      showToast('Discovery already running', 'error');
-    }
-  } catch (e) {
-    uiErr('POST /api/discover failed: ' + e.message);
+function renderSourceCards(sources, runningKeys) {
+  if (!els.sourceCards) return;
+  const keys = Object.keys(sources);
+  if (keys.length === 0) {
+    els.sourceCards.innerHTML = '<div style="color:var(--muted);">No sources configured.</div>';
+    return;
   }
-});
+  const carSources = ['CarMax', 'Carvana'];
+  let html = '';
+  for (const key of keys) {
+    const s = sources[key];
+    const running = runningKeys.includes(key) || s.running || s.discover_running;
+    const sched = _schedules.find(x => x.source === key);
+    const schedBadge = sched && sched.enabled
+      ? `<span style="font-size:.75rem;padding:2px 8px;background:var(--accent);color:#fff;border-radius:4px;">scheduled ${sched.minutes}m</span>`
+      : '<span style="font-size:.75rem;padding:2px 8px;background:var(--bg);color:var(--muted);border-radius:4px;border:1px solid var(--border);">no schedule</span>';
+    const isCar = carSources.includes(key);
+    const statHtml = isCar
+      ? `<span style="color:var(--muted);font-size:.8rem;">${s.records || 0} records${s.last_scraped ? ' · last ' + s.last_scraped : ''}</span>`
+      : `<span style="color:var(--muted);font-size:.8rem;">pending ${s.pending || 0} · done ${s.done || 0} · failed ${s.failed || 0}</span>`;
+    html += `<div style="padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:flex;flex-direction:column;gap:8px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">
+        <strong>${SOURCE_NAMES[key] || key}</strong>
+        ${running ? `<span style="font-size:.75rem;color:var(--accent);font-weight:600;">running ${formatUptime(s.uptime_seconds)}</span>` : schedBadge}
+      </div>
+      <div>${statHtml}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;">
+        <button class="btn btn-primary" style="font-size:.8rem;padding:6px 12px;" ${running ? 'disabled' : ''} onclick="startSource('${key}')">Scrape</button>
+        <button class="btn" style="font-size:.8rem;padding:6px 12px;background:var(--surface);border:1px solid var(--border);color:var(--text);" ${s.discover_running ? 'disabled' : ''} onclick="discoverSource('${key}')">Pull Index</button>
+        <button class="btn btn-danger" style="font-size:.8rem;padding:6px 12px;" ${!running ? 'disabled' : ''} onclick="stopSource('${key}')">Stop</button>
+      </div>
+    </div>`;
+  }
+  els.sourceCards.innerHTML = html;
+}
 
+// --- Add / Start scraper ---
 els.btnStart.addEventListener('click', async () => {
-  dbg('Start Scraping clicked');
-  els.btnStart.disabled = true;
-  setLastAction('Starting scraper…');
-  const source = document.getElementById('scrape-source').value || null;
+  const sourceKey = els.scrapeSource.value || 'AllBoatSites';
+  const mode = els.scrapeAction.value;
+  const limit = mode === 'test' ? 5 : null;
+  const scheduleOn = els.cbSchedule.checked;
+  const interval = parseInt(els.scheduleInterval.value) || 10080;
+
+  dbg(`Start clicked: ${sourceKey} mode=${mode} schedule=${scheduleOn} interval=${interval}`);
+  setLastAction('Starting ' + mode + ' for ' + (SOURCE_NAMES[sourceKey] || sourceKey));
+
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({source: source}) });
+    const res = await fetch('/api/start', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({
+        source: sourceKey === 'AllBoatSites' ? '' : sourceKey,
+        mode: mode,
+        limit: limit,
+        schedule_enabled: scheduleOn,
+        schedule_minutes: interval,
+      })
+    });
     const data = await res.json();
     dbg('start response: ' + JSON.stringify(data));
     if (data.success) {
-      showToast('Scraper started' + (source ? ' for ' + source : ''));
+      showToast('Started ' + mode.replace(/_/g, ' ') + ' for ' + (SOURCE_NAMES[sourceKey] || sourceKey) + (scheduleOn ? ' (scheduled)' : ''));
     } else {
-      showToast('Scraper already running', 'error');
+      showToast('Already running or failed for ' + sourceKey, 'error');
     }
   } catch (e) {
     uiErr('POST /api/start failed: ' + e.message);
   }
 });
 
-els.btnTest.addEventListener('click', async () => {
-  dbg('Test Run (5) clicked');
-  els.btnTest.disabled = true;
-  setLastAction('Starting test run (5 URLs)…');
-  const source = document.getElementById('scrape-source').value || null;
+els.btnStopAll.addEventListener('click', async () => {
+  dbg('Stop all clicked');
+  setLastAction('Stopping all sources…');
   try {
-    const res = await fetch('/api/start', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({limit: 5, source: source}) });
+    const res = await fetch('/api/stop', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({all: true}) });
     const data = await res.json();
-    dbg('test response: ' + JSON.stringify(data));
     if (data.success) {
-      showToast('Test run started (5 URLs)' + (source ? ' for ' + source : ''));
+      showToast('Stop signal sent to all running sources');
     } else {
-      showToast('Already running', 'error');
+      showToast('Nothing running', 'error');
     }
   } catch (e) {
-    uiErr('POST /api/start (test) failed: ' + e.message);
-  }
-});
-
-els.btnStop.addEventListener('click', async () => {
-  dbg('Stop clicked');
-  setLastAction('Stopping scraper…');
-  try {
-    const res = await fetch('/api/stop', { method: 'POST' });
-    const data = await res.json();
-    dbg('stop response: ' + JSON.stringify(data));
-    if (!data.success) {
-      showToast('Scraper not running', 'error');
-    } else {
-      showToast('Stop signal sent');
-    }
-  } catch (e) {
-    uiErr('POST /api/stop failed: ' + e.message);
+    uiErr('POST /api/stop all failed: ' + e.message);
   }
 });
 
@@ -353,26 +499,6 @@ els.btnWipeMfrs.addEventListener('click', async () => {
     }
   } catch (e) {
     uiErr('POST /api/wipe-manufacturers failed: ' + e.message);
-  }
-});
-
-els.btnRetry.addEventListener('click', async () => {
-  if (!confirm('Retry Failed URLs?\n\nThis will reset ALL failed URLs back to pending so they can be scraped again.\n\nProceed?')) return;
-  els.btnRetry.disabled = true;
-  setLastAction('Resetting failed URLs…');
-  try {
-    const res = await fetch('/api/retry-failed', { method: 'POST' });
-    const data = await res.json();
-    dbg('retry response: ' + JSON.stringify(data));
-    if (data.success) {
-      showToast(`Reset ${data.reset_count} failed URLs to pending.`);
-      setLastAction('Failed URLs reset');
-      updateStatus();
-    }
-  } catch (e) {
-    uiErr('POST /api/retry-failed failed: ' + e.message);
-  } finally {
-    els.btnRetry.disabled = false;
   }
 });
 
