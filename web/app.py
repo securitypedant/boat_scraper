@@ -418,6 +418,30 @@ def delete_all():
     return jsonify({"success": True, "deleted": deleted, "message": f"Deleted {deleted} records."})
 
 
+@app.route("/api/preview-missing-year")
+def preview_missing_year():
+    """Return a preview of boat records that have no year."""
+    try:
+        db = get_db()
+        db.row_factory = sqlite3.Row
+        cursor = db.execute(
+            """
+            SELECT id, year, make, name, length, class, source, url
+            FROM boats
+            WHERE year IS NULL OR year = ''
+            ORDER BY scraped_at DESC
+            LIMIT 500
+            """
+        )
+        rows = [dict(row) for row in cursor.fetchall()]
+        cursor = db.execute("SELECT COUNT(*) FROM boats WHERE year IS NULL OR year = ''")
+        total = cursor.fetchone()[0]
+        db.close()
+        return jsonify({"success": True, "total": total, "preview": rows})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
+
+
 @app.route("/api/delete-missing-year", methods=["POST"])
 def delete_missing_year():
     """Delete all boat records that have no year (common indicator of bad data)."""

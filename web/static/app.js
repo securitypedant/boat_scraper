@@ -24,6 +24,12 @@ const els = {
   btnDownload: document.getElementById('btn-download'),
   btnDeleteAll: document.getElementById('btn-delete-all'),
   btnDeleteMissingYear: document.getElementById('btn-delete-missing-year'),
+  previewModal: document.getElementById('preview-modal'),
+  previewTable: document.getElementById('preview-table'),
+  previewCount: document.getElementById('preview-count'),
+  btnClosePreview: document.getElementById('btn-close-preview'),
+  btnCancelPreview: document.getElementById('btn-cancel-preview'),
+  btnConfirmDeleteYear: document.getElementById('btn-confirm-delete-year'),
   sourceCards: document.getElementById('source-cards'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
@@ -866,11 +872,65 @@ if (els.btnDeleteAll) {
   });
 }
 
+function showPreviewModal() {
+  if (els.previewModal) els.previewModal.classList.add('active');
+}
+
+function hidePreviewModal() {
+  if (els.previewModal) els.previewModal.classList.remove('active');
+}
+
+function renderPreviewTable(data) {
+  if (!data.success) {
+    els.previewTable.innerHTML = `<div style="padding:16px;color:var(--danger);">Error previewing: ${data.error || 'Unknown'}</div>`;
+    return;
+  }
+  const total = data.total || 0;
+  const rows = data.preview || [];
+  const limited = rows.length < total ? ` (showing first ${rows.length})` : '';
+  if (els.previewCount) els.previewCount.textContent = `${total} records will be deleted${limited}.`;
+  if (total === 0) {
+    els.previewTable.innerHTML = '<div style="padding:16px;color:var(--muted);">No records missing year.</div>';
+    return;
+  }
+  let html = '<table style="font-size:.8rem;"><thead><tr><th>ID</th><th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Source</th></tr></thead><tbody>';
+  for (const row of rows) {
+    html += `<tr>
+      <td>${row.id}</td>
+      <td>${row.year ?? ''}</td>
+      <td>${(row.make ?? '').replace(/</g,'&lt;')}</td>
+      <td>${(row.name ?? '').replace(/</g,'&lt;')}</td>
+      <td>${row.length ?? ''}</td>
+      <td>${row.class ?? ''}</td>
+      <td>${row.source ?? ''}</td>
+    </tr>`;
+  }
+  html += '</tbody></table>';
+  els.previewTable.innerHTML = html;
+}
+
 if (els.btnDeleteMissingYear) {
   els.btnDeleteMissingYear.addEventListener('click', async () => {
-    if (!confirm('Delete ALL rows that have no year?\n\nInvalid data such as "Server error" entries usually lack a year. This cannot be undone.')) return;
-    els.btnDeleteMissingYear.disabled = true;
-    els.btnDeleteMissingYear.textContent = 'Deleting…';
+    showPreviewModal();
+    setLastAction('Loading preview of records without year…');
+    try {
+      const res = await fetch('/api/preview-missing-year');
+      const data = await res.json();
+      renderPreviewTable(data);
+    } catch (e) {
+      uiErr('GET /api/preview-missing-year failed: ' + e.message);
+      hidePreviewModal();
+    }
+  });
+}
+
+if (els.btnClosePreview) els.btnClosePreview.addEventListener('click', hidePreviewModal);
+if (els.btnCancelPreview) els.btnCancelPreview.addEventListener('click', hidePreviewModal);
+
+if (els.btnConfirmDeleteYear) {
+  els.btnConfirmDeleteYear.addEventListener('click', async () => {
+    els.btnConfirmDeleteYear.disabled = true;
+    els.btnConfirmDeleteYear.textContent = 'Deleting…';
     setLastAction('Deleting records without year…');
     try {
       const res = await fetch('/api/delete-missing-year', { method: 'POST' });
@@ -881,16 +941,16 @@ if (els.btnDeleteMissingYear) {
         setLastAction('Delete complete');
         els.results.innerHTML = '<div class="empty">Records deleted. Run query again.</div>';
         els.btnDeleteMissingYear.style.display = 'none';
+        hidePreviewModal();
         updateStatus();
       } else {
         showToast('Delete failed: ' + (data.error || 'Unknown'), 'error');
-        els.btnDeleteMissingYear.disabled = false;
-        els.btnDeleteMissingYear.textContent = 'Delete Rows Without Year';
       }
     } catch (e) {
       uiErr('POST /api/delete-missing-year failed: ' + e.message);
-      els.btnDeleteMissingYear.disabled = false;
-      els.btnDeleteMissingYear.textContent = 'Delete Rows Without Year';
+    } finally {
+      els.btnConfirmDeleteYear.disabled = false;
+      els.btnConfirmDeleteYear.textContent = 'Delete All Shown Records';
     }
   });
 }
