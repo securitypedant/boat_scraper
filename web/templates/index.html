@@ -177,8 +177,6 @@
     <input type="text" id="q-class" placeholder="Class">
     <input type="text" id="q-engine" placeholder="Engine">
     <input type="text" id="q-hin" placeholder="HIN">
-    <input type="number" id="q-min-length" placeholder="Min Length (ft)">
-    <input type="number" id="q-max-length" placeholder="Max Length (ft)">
     <select id="q-source">
       <option value="">All Sources</option>
       <option value="BoatTrader">BoatTrader</option>
@@ -198,6 +196,7 @@
   <div class="controls" style="margin-bottom:12px;">
     <button id="btn-query" class="btn btn-primary">Run Query</button>
     <button id="btn-delete-all" class="btn btn-danger" style="display:none;">Delete All Matching</button>
+    <button id="btn-delete-missing-year" class="btn btn-danger" style="display:none;">Delete Rows Without Year</button>
     <span id="query-total" style="color:var(--muted);font-size:.85rem;margin-left:8px;"></span>
   </div>
   <div id="results" style="overflow-x:auto;">

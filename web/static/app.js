@@ -23,6 +23,7 @@ const els = {
   btnWipeMfrs: document.getElementById('btn-wipe-mfrs'),
   btnDownload: document.getElementById('btn-download'),
   btnDeleteAll: document.getElementById('btn-delete-all'),
+  btnDeleteMissingYear: document.getElementById('btn-delete-missing-year'),
   sourceCards: document.getElementById('source-cards'),
   logs: document.getElementById('logs'),
   results: document.getElementById('results'),
@@ -609,10 +610,6 @@ function buildQueryParams() {
   if (hin) p.set('hin', hin);
   const source = document.getElementById('q-source').value;
   if (source) p.set('source', source);
-  const minLen = document.getElementById('q-min-length').value;
-  if (minLen) p.set('min_length', minLen);
-  const maxLen = document.getElementById('q-max-length').value;
-  if (maxLen) p.set('max_length', maxLen);
   p.set('order_by', document.getElementById('q-order').value);
   p.set('limit', '50');
   return p;
@@ -632,10 +629,6 @@ function buildQueryFiltersJson() {
   if (hin) filters.hin = hin;
   const source = document.getElementById('q-source').value;
   if (source) filters.source = source;
-  const minLen = document.getElementById('q-min-length').value;
-  if (minLen) filters.min_length = parseInt(minLen, 10);
-  const maxLen = document.getElementById('q-max-length').value;
-  if (maxLen) filters.max_length = parseInt(maxLen, 10);
   return filters;
 }
 
@@ -653,10 +646,11 @@ function renderResults(data) {
   }
 
   els.btnDeleteAll.style.display = 'inline-flex';
+  if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = 'inline-flex';
 
-  const cols = ['year','make','name','length','class','engine','total_power','engine_hours','model','capacity','hin','source'];
+  const cols = ['year','make','model','length','class','engine','total_power','engine_hours','capacity','hin','name','source'];
   let html = '<table><thead><tr>';
-  html += '<th>Year</th><th>Make</th><th>Name</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Model</th><th>Capacity</th><th>HIN</th><th>Source</th><th style="text-align:center;width:80px;">Actions</th>';
+  html += '<th>Year</th><th>Make</th><th>Model</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Capacity</th><th>HIN</th><th>Name</th><th>Source</th><th style="text-align:center;width:80px;">Actions</th>';
   html += '</tr></thead><tbody>';
 
   for (const row of data.rows) {
@@ -868,6 +862,35 @@ if (els.btnDeleteAll) {
       uiErr('POST /api/delete-all failed: ' + e.message);
       els.btnDeleteAll.disabled = false;
       els.btnDeleteAll.textContent = 'Delete All Matching';
+    }
+  });
+}
+
+if (els.btnDeleteMissingYear) {
+  els.btnDeleteMissingYear.addEventListener('click', async () => {
+    if (!confirm('Delete ALL rows that have no year?\n\nInvalid data such as "Server error" entries usually lack a year. This cannot be undone.')) return;
+    els.btnDeleteMissingYear.disabled = true;
+    els.btnDeleteMissingYear.textContent = 'Deleting…';
+    setLastAction('Deleting records without year…');
+    try {
+      const res = await fetch('/api/delete-missing-year', { method: 'POST' });
+      const data = await res.json();
+      dbg('delete-missing-year response: ' + JSON.stringify(data));
+      if (data.success) {
+        showToast(data.message, 'success');
+        setLastAction('Delete complete');
+        els.results.innerHTML = '<div class="empty">Records deleted. Run query again.</div>';
+        els.btnDeleteMissingYear.style.display = 'none';
+        updateStatus();
+      } else {
+        showToast('Delete failed: ' + (data.error || 'Unknown'), 'error');
+        els.btnDeleteMissingYear.disabled = false;
+        els.btnDeleteMissingYear.textContent = 'Delete Rows Without Year';
+      }
+    } catch (e) {
+      uiErr('POST /api/delete-missing-year failed: ' + e.message);
+      els.btnDeleteMissingYear.disabled = false;
+      els.btnDeleteMissingYear.textContent = 'Delete Rows Without Year';
     }
   });
 }

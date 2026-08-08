@@ -292,8 +292,6 @@ def query_boats():
         engine = request.args.get("engine")
         hin = request.args.get("hin")
         source = request.args.get("source")
-        min_length = request.args.get("min_length", type=int)
-        max_length = request.args.get("max_length", type=int)
         has_field = request.args.get("has_field")
         missing_field = request.args.get("missing_field")
         order_by = request.args.get("order_by", "scraped_at DESC")
@@ -305,8 +303,6 @@ def query_boats():
             engine=engine,
             hin=hin,
             source=source,
-            min_length=min_length,
-            max_length=max_length,
             has_field=has_field,
             missing_field=missing_field,
             order_by=order_by,
@@ -399,8 +395,6 @@ def delete_all():
         engine=data.get("engine"),
         hin=data.get("hin"),
         source=data.get("source"),
-        min_length=data.get("min_length"),
-        max_length=data.get("max_length"),
         has_field=data.get("has_field"),
         missing_field=data.get("missing_field"),
     )
@@ -422,6 +416,29 @@ def delete_all():
 
     log_buffer.write(f"[dashboard] Deleted {deleted} boat records matching filters.")
     return jsonify({"success": True, "deleted": deleted, "message": f"Deleted {deleted} records."})
+
+
+@app.route("/api/delete-missing-year", methods=["POST"])
+def delete_missing_year():
+    """Delete all boat records that have no year (common indicator of bad data)."""
+    try:
+        db = get_db()
+        cursor = db.execute("SELECT COUNT(*) FROM boats WHERE year IS NULL OR year = ''")
+        to_delete = cursor.fetchone()[0]
+
+        if to_delete == 0:
+            db.close()
+            return jsonify({"success": True, "deleted": 0, "message": "No records missing year."})
+
+        cursor = db.execute("DELETE FROM boats WHERE year IS NULL OR year = ''")
+        deleted = cursor.rowcount
+        db.commit()
+        db.close()
+
+        log_buffer.write(f"[dashboard] Deleted {deleted} boat records missing year.")
+        return jsonify({"success": True, "deleted": deleted, "message": f"Deleted {deleted} records missing year."})
+    except Exception as exc:
+        return jsonify({"success": False, "error": str(exc)}), 500
 
 
 @app.route("/api/boat/<int:boat_id>")

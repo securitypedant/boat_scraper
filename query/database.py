@@ -20,8 +20,6 @@ def _build_where(
     engine: str | None = None,
     hin: str | None = None,
     source: str | None = None,
-    min_length: int | None = None,
-    max_length: int | None = None,
     has_field: str | None = None,
     missing_field: str | None = None,
 ) -> tuple[str, list]:
@@ -50,14 +48,6 @@ def _build_where(
         sql += " AND source = ?"
         params.append(source)
 
-    if min_length is not None:
-        sql += " AND CAST(REPLACE(REPLACE(length, 'ft', ''), \"'\", '') AS REAL) >= ?"
-        params.append(min_length)
-
-    if max_length is not None:
-        sql += " AND CAST(REPLACE(REPLACE(length, 'ft', ''), \"'\", '') AS REAL) <= ?"
-        params.append(max_length)
-
     if has_field is not None:
         sql += f" AND {has_field} IS NOT NULL"
 
@@ -74,8 +64,6 @@ def build_query(
     engine: str | None = None,
     hin: str | None = None,
     source: str | None = None,
-    min_length: int | None = None,
-    max_length: int | None = None,
     has_field: str | None = None,
     missing_field: str | None = None,
     order_by: str = "scraped_at DESC",
@@ -95,7 +83,7 @@ def build_query(
     sql, params = _build_where(
         sql, params,
         year=year, make=make, boat_class=boat_class, engine=engine,
-        hin=hin, source=source, min_length=min_length, max_length=max_length,
+        hin=hin, source=source,
         has_field=has_field, missing_field=missing_field,
     )
 
@@ -129,8 +117,6 @@ def build_delete_query(
     engine: str | None = None,
     hin: str | None = None,
     source: str | None = None,
-    min_length: int | None = None,
-    max_length: int | None = None,
     has_field: str | None = None,
     missing_field: str | None = None,
 ) -> tuple[str, list]:
@@ -141,7 +127,7 @@ def build_delete_query(
     sql, params = _build_where(
         sql, params,
         year=year, make=make, boat_class=boat_class, engine=engine,
-        hin=hin, source=source, min_length=min_length, max_length=max_length,
+        hin=hin, source=source,
         has_field=has_field, missing_field=missing_field,
     )
 
