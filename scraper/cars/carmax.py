@@ -87,14 +87,23 @@ def _extract_stock_links(page: Page, category_url: str) -> set[str]:
     try:
         page.goto(category_url, wait_until="domcontentloaded", timeout=30000)
         # Give React a moment to render
-        page.wait_for_timeout(2500)
+        page.wait_for_timeout(1500)
     except Exception as e:
         log(LogLevel.QUIET, f"[carmax] Failed to load category {category_url}: {e}")
         return detail_ids
 
+    try:
+        title = page.title().lower()
+        if "access denied" in title or "access denied" in page.content().lower():
+            log(LogLevel.QUIET, f"[carmax] Access denied for {category_url}; skipping.")
+            return detail_ids
+    except Exception:
+        pass
+
     previous_count = -1
     stagnant = 0
-    max_scrolls = 10
+    max_scrolls = 6
+    no_results_seen = 0
     for _ in range(max_scrolls):
         # Pull all /car/ links currently in the DOM
         hrefs = page.evaluate(
@@ -115,9 +124,19 @@ def _extract_stock_links(page: Page, category_url: str) -> set[str]:
             stagnant = 0
         previous_count = len(detail_ids)
 
+        # Quick exit if the page signals no inventory for this make/model.
+        try:
+            title = page.title().lower()
+            if "no results" in title or "no vehicles" in title or "0 matches" in title:
+                no_results_seen += 1
+                if no_results_seen >= 1:
+                    break
+        except Exception:
+            pass
+
         # Scroll to load more
         page.evaluate("() => window.scrollTo(0, document.body.scrollHeight)")
-        page.wait_for_timeout(1200)
+        page.wait_for_timeout(800)
 
     return detail_ids
 
@@ -130,12 +149,15 @@ def discover_urls(page: Page, db=None, refresh: bool = False) -> list[str]:
     category_urls = _discover_category_urls(page, refresh=refresh)
     log(LogLevel.STANDARD, f"[carmax] Found {len(category_urls)} make/model category pages")
 
+    cap = 30
+    category_urls = category_urls[:cap]
     all_detail_urls = set()
-    for cat_url in category_urls[:50]:  # cap initial exploration to avoid marathon runs
+    for i, cat_url in enumerate(category_urls, 1):
+        log(LogLevel.STANDARD, f"[carmax] {i}/{len(category_urls)} Reading {cat_url} ...")
         ids = _extract_stock_links(page, cat_url)
         all_detail_urls.update(ids)
-        log(LogLevel.DEBUG, f"[carmax] {cat_url} -> {len(ids)} detail links (total {len(all_detail_urls)})")
-        time.sleep(1.5)
+        log(LogLevel.STANDARD, f"[carmax] {i}/{len(category_urls)} Got {len(ids)} links (total {len(all_detail_urls)})")
+        time.sleep(1.0)
 
     cursor = db.cursor()
     new_urls = 0
