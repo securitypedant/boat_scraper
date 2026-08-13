@@ -147,7 +147,12 @@ def _extract_detail_urls_from_category_page(page: Page, url: str) -> set[str]:
     return detail_urls
 
 
-def discover_urls(page: Page, db=None, refresh: bool = False) -> list[str]:
+def discover_urls(
+    page: Page,
+    db=None,
+    refresh: bool = False,
+    stop_event=None,
+) -> list[str]:
     """Discover Carvana detail URLs from sitemap category pages."""
     if db is None:
         db = get_db("Carvana")
@@ -155,11 +160,18 @@ def discover_urls(page: Page, db=None, refresh: bool = False) -> list[str]:
     category_urls = _discover_category_urls(page, refresh=refresh)
     log(LogLevel.STANDARD, f"[carvana] Found {len(category_urls)} category pages")
 
+    if stop_event and stop_event.is_set():
+        log(LogLevel.STANDARD, "[carvana] Stop requested before category scan.")
+        return []
+
     all_detail_urls = set()
-    for cat_url in category_urls[:30]:
+    for i, cat_url in enumerate(category_urls[:30], 1):
+        if stop_event and stop_event.is_set():
+            log(LogLevel.STANDARD, "[carvana] Stop requested during category scan.")
+            break
         urls = _extract_detail_urls_from_category_page(page, cat_url)
         all_detail_urls.update(urls)
-        log(LogLevel.DEBUG, f"[carvana] {cat_url} -> {len(urls)} detail links (total {len(all_detail_urls)})")
+        log(LogLevel.STANDARD, f"[carvana] {i}/30 {cat_url} -> {len(urls)} detail links (total {len(all_detail_urls)})")
         time.sleep(1.0)
 
     cursor = db.cursor()

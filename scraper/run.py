@@ -160,21 +160,30 @@ def _warm_source(page, source: str, warmed: set[str]) -> None:
     warmed.add(source)
 
 
-def discover_only(page: Page, source: str | None = None, refresh: bool = False) -> list[str]:
+def discover_only(
+    page: Page,
+    source: str | None = None,
+    refresh: bool = False,
+    stop_event: threading.Event | None = None,
+) -> list[str]:
     """Discover URLs from sitemaps without scraping them.
 
     Args:
         page: An authenticated Playwright page.
         source: Which site's URLs to discover. If None, discovers all sites.
         refresh: If True, ignore local cached .gz files and refetch from the web.
+        stop_event: If set, abort discovery early.
 
     Returns a list of unique listing URLs added.
     """
     all_urls = []
     if source:
-        return discover_urls(page, source=source, refresh=refresh)
+        return discover_urls(page, source=source, refresh=refresh, stop_event=stop_event)
     for site in ["BoatTrader", "YachtWorld", "BoatsDotCom"]:
-        urls = discover_urls(page, source=site, refresh=refresh)
+        if stop_event and stop_event.is_set():
+            print("[run] Stop requested during multi-site discovery.")
+            break
+        urls = discover_urls(page, source=site, refresh=refresh, stop_event=stop_event)
         all_urls.extend(urls)
     return all_urls
 
@@ -213,11 +222,14 @@ def scrape(
         # Phase 1: Discover URLs using the authenticated browser
         if discover and not retry_failed:
             if source:
-                discover_urls(page, source=source)
+                discover_urls(page, source=source, stop_event=stop_event)
             else:
                 # Discover URLs for all sites
                 for site in SITE_MAPS:
-                    discover_urls(page, source=site)
+                    if stop_event and stop_event.is_set():
+                        print("[run] Stop requested during discovery.")
+                        break
+                    discover_urls(page, source=site, stop_event=stop_event)
         elif retry_failed:
             # Reset failed to pending
             db.execute("UPDATE progress SET status = 'pending' WHERE status = 'failed'")

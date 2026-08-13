@@ -3,6 +3,7 @@ import base64
 import gzip
 import io
 import re
+import threading
 import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -147,7 +148,10 @@ def _fetch_sitemap_text(page: Page, url: str, refresh: bool = False) -> str:
 
 
 def discover_urls(
-    page: Page, source: str | None = None, refresh: bool = False
+    page: Page,
+    source: str | None = None,
+    refresh: bool = False,
+    stop_event: threading.Event | None = None,
 ) -> list[str]:
     """Discover boat detail URLs from a site's sitemaps and store them in the DB.
 
@@ -155,6 +159,7 @@ def discover_urls(
         page: An authenticated Playwright page.
         source: Which site's URLs to discover. If None, discovers BoatTrader URLs.
         refresh: If True, ignore local cached .gz files and refetch from the web.
+        stop_event: If set, abort discovery early.
 
     Returns a list of unique listing URLs (may be empty if already populated).
     """
@@ -164,6 +169,10 @@ def discover_urls(
     config = SITE_MAPS.get(source)
     if not config:
         print(f"[sitemap] Unknown source '{source}'. Skipping discovery.")
+        return []
+
+    if stop_event and stop_event.is_set():
+        print("[sitemap] Stop requested before discovery started.")
         return []
 
     domain = _domain_for_source(source)
@@ -250,6 +259,9 @@ def discover_urls(
 
     all_urls = set()
     for sm_url in sitemap_urls[:50]:  # cap at 50 sitemap files
+        if stop_event and stop_event.is_set():
+            print("[sitemap] Stop requested during sitemap discovery.")
+            break
         print(f"[sitemap] Fetching {sm_url}...")
         try:
             content = _fetch_sitemap_text(page, sm_url, refresh=refresh)

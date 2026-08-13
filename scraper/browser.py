@@ -1,5 +1,7 @@
 """Browser management with stealth Playwright setup."""
+import os
 import time
+from urllib.parse import urlparse
 
 from playwright.sync_api import sync_playwright, Browser, BrowserContext, Page
 from playwright_stealth.stealth import Stealth
@@ -58,6 +60,24 @@ class BoatBrowser:
         ]
         return any(marker in content for marker in challenge_markers)
 
+    def _proxy_config(self) -> dict | None:
+        """Build Playwright proxy config from HTTP_PROXY/HTTPS_PROXY env vars."""
+        proxy_url = os.environ.get("HTTPS_PROXY") or os.environ.get("HTTP_PROXY")
+        if not proxy_url:
+            return None
+        parsed = urlparse(proxy_url)
+        if not parsed.hostname:
+            return None
+        server = f"{parsed.scheme or 'http'}://{parsed.hostname}"
+        if parsed.port:
+            server += f":{parsed.port}"
+        config = {"server": server}
+        if parsed.username:
+            config["username"] = parsed.username
+        if parsed.password:
+            config["password"] = parsed.password
+        return config
+
     def _launch_browser(self) -> None:
         """Launch Chromium with stealth flags and persistent storage state."""
         self.playwright = sync_playwright().start()
@@ -80,10 +100,19 @@ class BoatBrowser:
         if HEADLESS:
             launch_args.append("--headless=new")
 
-        self.browser = self.playwright.chromium.launch(
-            headless=False,
-            args=launch_args,
-        )
+        proxy_config = self._proxy_config()
+        if proxy_config:
+            print(f"[browser] Using proxy {proxy_config['server']}")
+            self.browser = self.playwright.chromium.launch(
+                headless=False,
+                args=launch_args,
+                proxy=proxy_config,
+            )
+        else:
+            self.browser = self.playwright.chromium.launch(
+                headless=False,
+                args=launch_args,
+            )
 
         storage_state = None
         self._loaded_state = False

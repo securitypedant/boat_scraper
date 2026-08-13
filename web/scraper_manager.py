@@ -144,25 +144,30 @@ class ScraperManager:
         return True
 
     def stop(self, source: str | None = None, all_sources: bool = False) -> bool:
-        """Signal one or all scrapers to stop gracefully."""
+        """Signal one or all scrapers/discovery jobs to stop gracefully."""
         self._log(f"stop() called: source={source} all_sources={all_sources}")
         if all_sources:
             any_running = False
-            for key in list(self._scraper_threads.keys()):
-                if self.scraper_running(key):
+            keys = set(self._scraper_threads.keys()) | set(self._discover_threads.keys())
+            for key in keys:
+                if self.scraper_running(key) or self.discover_running(key):
                     self._stop_requested[key] = True
                     self.log_buffer.write(f"[manager] Stop signal sent to {key}...")
-                    self._stop_events[key].set()
+                    evt = self._stop_events.get(key)
+                    if evt is not None:
+                        evt.set()
                     any_running = True
             return any_running
 
         key = _source_key(source)
-        if not self.scraper_running(key):
-            self._log(f"stop() rejected: scraper not running for {key}")
+        if not self.scraper_running(key) and not self.discover_running(key):
+            self._log(f"stop() rejected: nothing running for {key}")
             return False
         self._stop_requested[key] = True
         self.log_buffer.write(f"[manager] Stop signal sent to {key}...")
-        self._stop_events[key].set()
+        evt = self._stop_events.get(key)
+        if evt is not None:
+            evt.set()
         return True
 
     def discover(self, source: str | None = None, refresh: bool = False) -> bool:
@@ -173,6 +178,8 @@ class ScraperManager:
             self._log(f"discover() rejected: discovery already running for {key}")
             return False
 
+        self._stop_events[key] = threading.Event()
+        self._stop_requested[key] = False
         self._start_times[key] = datetime.now(timezone.utc)
         self._discover_threads[key] = threading.Thread(
             target=self._run_discover,
@@ -243,6 +250,7 @@ class ScraperManager:
 
     def _run_discover(self, key: str, source: str | None, refresh: bool) -> None:
         self._log(f"--- discover thread started ({key}) ---")
+        stop_event = self._stop_events.get(key)
 
         def run():
             self._log(f"Entering discovery for {key}...")
@@ -251,9 +259,9 @@ class ScraperManager:
                     if source in SOURCE_DB_NAMES:
                         module = CAR_SOURCE_MODULES[source]
                         db = get_db(source)
-                        module.discover_urls(browser.page, db=db, refresh=refresh)
+                        module.discover_urls(browser.page, db=db, refresh=refresh, stop_event=stop_event)
                     else:
-                        discover_only(browser.page, source=source, refresh=refresh)
+                        discover_only(browser.page, source=source, refresh=refresh, stop_event=stop_event)
             except Exception:
                 traceback.print_exc()
             self._log(f"discovery returned for {key}")

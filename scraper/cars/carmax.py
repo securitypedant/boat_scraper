@@ -141,7 +141,12 @@ def _extract_stock_links(page: Page, category_url: str) -> set[str]:
     return detail_ids
 
 
-def discover_urls(page: Page, db=None, refresh: bool = False) -> list[str]:
+def discover_urls(
+    page: Page,
+    db=None,
+    refresh: bool = False,
+    stop_event=None,
+) -> list[str]:
     """Discover CarMax detail URLs from sitemap category pages."""
     if db is None:
         db = get_db("CarMax")
@@ -149,10 +154,17 @@ def discover_urls(page: Page, db=None, refresh: bool = False) -> list[str]:
     category_urls = _discover_category_urls(page, refresh=refresh)
     log(LogLevel.STANDARD, f"[carmax] Found {len(category_urls)} make/model category pages")
 
+    if stop_event and stop_event.is_set():
+        log(LogLevel.STANDARD, "[carmax] Stop requested before category scan.")
+        return []
+
     cap = 30
     category_urls = category_urls[:cap]
     all_detail_urls = set()
     for i, cat_url in enumerate(category_urls, 1):
+        if stop_event and stop_event.is_set():
+            log(LogLevel.STANDARD, "[carmax] Stop requested during category scan.")
+            break
         log(LogLevel.STANDARD, f"[carmax] {i}/{len(category_urls)} Reading {cat_url} ...")
         ids = _extract_stock_links(page, cat_url)
         all_detail_urls.update(ids)
