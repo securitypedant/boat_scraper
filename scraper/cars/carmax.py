@@ -10,6 +10,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
+from scraper.browser import wait_for_site_access
 from scraper.config import MAX_ATTEMPTS
 from scraper.database import get_db
 from scraper.logger import LogLevel, log
@@ -85,7 +86,12 @@ def _extract_stock_links(page: Page, category_url: str) -> set[str]:
     """Visit a category page and collect /car/{stockNumber} detail links."""
     detail_ids = set()
     try:
-        page.goto(category_url, wait_until="domcontentloaded", timeout=30000)
+        page.goto(
+            category_url,
+            wait_until="domcontentloaded",
+            timeout=30000,
+            referer="https://www.carmax.com/",
+        )
         # Give React a moment to render
         page.wait_for_timeout(1500)
     except Exception as e:
@@ -156,6 +162,10 @@ def discover_urls(
 
     if stop_event and stop_event.is_set():
         log(LogLevel.STANDARD, "[carmax] Stop requested before category scan.")
+        return []
+
+    if not wait_for_site_access(page, "https://www.carmax.com", timeout=30):
+        log(LogLevel.STANDARD, "[carmax] Could not access www.carmax.com; aborting discovery.")
         return []
 
     cap = 30

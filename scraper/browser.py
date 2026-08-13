@@ -16,6 +16,68 @@ from scraper.config import (
 )
 
 
+def wait_for_site_access(page: Page, url: str, timeout: int = 30) -> bool:
+    """Navigate to a domain, wait out any challenge, return True if accessible.
+
+    This is the same clearance logic used at browser startup for BoatTrader,
+    but usable for any site (CarMax, Carvana, etc.).
+    """
+    def _is_hard_blocked(response) -> bool:
+        if response is None or getattr(response, "status", None) != 403:
+            return False
+        try:
+            title = page.title().lower()
+        except Exception:
+            title = ""
+        return "access denied" in title or "forbidden" in title
+
+    def _is_challenge_page() -> bool:
+        try:
+            content = page.content().lower()
+            title = page.title().lower()
+        except Exception:
+            return False
+        challenge_markers = [
+            "performing security verification",
+            "just a moment",
+            "verify you are human",
+            "cf-turnstile",
+            "ray id",
+            "enable javascript and cookies to continue",
+        ]
+        return any(marker in content or marker in title for marker in challenge_markers)
+
+    print(f"[browser] Warming up {url}...")
+    try:
+        response = page.goto(url, wait_until="domcontentloaded", timeout=timeout * 1000)
+    except Exception as e:
+        print(f"[browser] Failed to navigate {url}: {e}")
+        return False
+
+    if _is_hard_blocked(response):
+        print(
+            f"[browser] Hard block on {url}: status={response.status if response else 'unknown'}, "
+            f"title={page.title()[:80]!r}"
+        )
+        return False
+
+    if _is_challenge_page():
+        print(f"[browser] Challenge detected on {url}; waiting up to {CHALLENGE_TIMEOUT}s...")
+        deadline = time.time() + CHALLENGE_TIMEOUT
+        while time.time() < deadline:
+            try:
+                page.wait_for_timeout(2000)
+                if not _is_challenge_page():
+                    print(f"[browser] Challenge cleared for {url}")
+                    return True
+            except Exception:
+                pass
+        print(f"[browser] Challenge did not clear for {url}; title={page.title()[:80]!r}")
+        return False
+
+    return True
+
+
 class BoatBrowser:
     """Manages a stealth Playwright browser instance for BoatTrader scraping.
 

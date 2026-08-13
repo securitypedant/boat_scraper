@@ -10,6 +10,7 @@ from typing import Any
 from bs4 import BeautifulSoup
 from playwright.sync_api import Page, TimeoutError as PlaywrightTimeout
 
+from scraper.browser import wait_for_site_access
 from scraper.database import get_db
 from scraper.logger import LogLevel, log
 
@@ -162,6 +163,10 @@ def discover_urls(
 
     if stop_event and stop_event.is_set():
         log(LogLevel.STANDARD, "[carvana] Stop requested before category scan.")
+        return []
+
+    if not wait_for_site_access(page, "https://www.carvana.com", timeout=30):
+        log(LogLevel.STANDARD, "[carvana] Could not access www.carvana.com; aborting discovery.")
         return []
 
     all_detail_urls = set()
