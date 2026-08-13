@@ -1,4 +1,6 @@
 """CarMax car listing discovery and detail scraping."""
+import base64
+import gzip
 import json
 import re
 import time
@@ -20,15 +22,33 @@ CARMAX_CATEGORY_RE = re.compile(r"^https://www\.carmax\.com/cars/[^/]+/[^/]+/?$"
 
 
 def _fetch_text(page: Page, url: str) -> str:
-    """Fetch a URL via the browser's fetch API."""
-    return page.evaluate(
+    """Fetch a URL via the browser's fetch API and return decoded text.
+
+    Handles gzip-compressed resources (.gz sitemaps) by returning the raw
+    response as a base64 data URL and decompressing locally.
+    """
+    data_url: str = page.evaluate(
         """async (url) => {
             const resp = await fetch(url, { credentials: 'include' });
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            return await resp.text();
+            const blob = await resp.blob();
+            return await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = () => reject(new Error('FileReader failed'));
+                reader.readAsDataURL(blob);
+            });
         }""",
         url,
     )
+    comma = data_url.find(",")
+    if comma < 0:
+        raise ValueError("Unexpected fetch response format")
+    meta = data_url[:comma].lower()
+    payload = base64.b64decode(data_url[comma + 1 :])
+    if url.endswith(".gz") or "gzip" in meta or "application/gzip" in meta or "application/x-gzip" in meta:
+        payload = gzip.decompress(payload)
+    return payload.decode("utf-8", errors="replace")
 
 
 def _discover_category_urls(page: Page, refresh: bool = False) -> list[str]:

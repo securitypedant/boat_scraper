@@ -129,7 +129,7 @@ def discover_scraper():
     except Exception as exc:
         log_buffer.write(f"[dashboard] manager.discover() ERROR: {exc}")
         ok = False
-    return jsonify({"success": ok, "running": manager.discover_running})
+    return jsonify({"success": ok, "running": manager.discover_running(source)})
 
 
 @app.route("/api/sitemap-urls")
