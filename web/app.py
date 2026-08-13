@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 
 from flask import Flask, Response, jsonify, render_template, request, send_file
 
-from query.database import build_delete_query, build_query, get_db
+from query.database import build_count_query, build_delete_query, build_query, get_db, list_databases
 from scraper.config import DB_PATH, SOURCE_DB_NAMES
 from scraper.sitemap import SITE_MAPS
 from web.log_buffer import LogBuffer, setup_logging
@@ -280,25 +280,35 @@ def logs():
     )
 
 
+@app.route("/api/databases")
+def databases():
+    """Return the list of databases available for querying."""
+    return jsonify({"success": True, "databases": list_databases()})
+
+
 @app.route("/api/query")
 def query_boats():
-    """Query boats with filters."""
+    """Query selected database with filters."""
     try:
+        db_name = request.args.get("db", "boats").lower()
         limit = request.args.get("limit", 20, type=int)
         offset = request.args.get("offset", 0, type=int)
         year = request.args.get("year", type=int)
         make = request.args.get("make")
+        model = request.args.get("model")
         boat_class = request.args.get("class")
         engine = request.args.get("engine")
         hin = request.args.get("hin")
         source = request.args.get("source")
         has_field = request.args.get("has_field")
         missing_field = request.args.get("missing_field")
-        order_by = request.args.get("order_by", "scraped_at DESC")
+        order_by = request.args.get("order_by")
 
         sql, params = build_query(
+            db_name=db_name,
             year=year,
             make=make,
+            model=model,
             boat_class=boat_class,
             engine=engine,
             hin=hin,
@@ -310,43 +320,29 @@ def query_boats():
             offset=offset,
         )
 
-        db = get_db()
-        db.row_factory = sqlite3.Row
+        db = get_db(db_name)
         cursor = db.execute(sql, params)
         rows = [dict(row) for row in cursor.fetchall()]
 
-        # Total count
-        count_sql = "SELECT COUNT(*) FROM boats WHERE 1=1"
-        count_params = []
-        if year is not None:
-            count_sql += " AND year = ?"
-            count_params.append(year)
-        if make is not None:
-            count_sql += " AND make LIKE ?"
-            count_params.append(f"%{make}%")
-        if boat_class is not None:
-            count_sql += " AND class LIKE ?"
-            count_params.append(f"%{boat_class}%")
-        if engine is not None:
-            count_sql += " AND engine LIKE ?"
-            count_params.append(f"%{engine}%")
-        if hin is not None:
-            count_sql += " AND hin LIKE ?"
-            count_params.append(f"%{hin}%")
-        if source is not None:
-            count_sql += " AND source = ?"
-            count_params.append(source)
-        if has_field is not None:
-            count_sql += f" AND {has_field} IS NOT NULL"
-        if missing_field is not None:
-            count_sql += f" AND {missing_field} IS NULL"
-
+        count_sql, count_params = build_count_query(
+            db_name=db_name,
+            year=year,
+            make=make,
+            model=model,
+            boat_class=boat_class,
+            engine=engine,
+            hin=hin,
+            source=source,
+            has_field=has_field,
+            missing_field=missing_field,
+        )
         cursor = db.execute(count_sql, count_params)
         total = cursor.fetchone()[0]
         db.close()
 
         return jsonify({
             "success": True,
+            "db": db_name,
             "total": total,
             "offset": offset,
             "limit": limit,
@@ -384,13 +380,15 @@ def upload_sitemaps():
 
 @app.route("/api/delete-all", methods=["POST"])
 def delete_all():
-    """Delete all boats matching the query filters (ignoring limit/offset)."""
+    """Delete all records matching the query filters (ignoring limit/offset)."""
     data = request.get_json(silent=True) or {}
+    db_name = (data.get("db") or "boats").lower()
 
-    # Build DELETE query using same filters as query endpoint
     sql, params = build_delete_query(
+        db_name=db_name,
         year=data.get("year"),
         make=data.get("make"),
+        model=data.get("model"),
         boat_class=data.get("boat_class"),
         engine=data.get("engine"),
         hin=data.get("hin"),
@@ -399,9 +397,10 @@ def delete_all():
         missing_field=data.get("missing_field"),
     )
 
-    db = get_db()
+    db = get_db(db_name)
     # First count how many will be deleted
-    count_sql = sql.replace("DELETE FROM boats", "SELECT COUNT(*) FROM boats")
+    table = "boats" if db_name == "boats" else "cars"
+    count_sql = sql.replace(f"DELETE FROM {table}", f"SELECT COUNT(*) FROM {table}")
     cursor = db.execute(count_sql, params)
     to_delete = cursor.fetchone()[0]
 
@@ -414,7 +413,7 @@ def delete_all():
     db.commit()
     db.close()
 
-    log_buffer.write(f"[dashboard] Deleted {deleted} boat records matching filters.")
+    log_buffer.write(f"[dashboard] Deleted {deleted} records from {db_name} matching filters.")
     return jsonify({"success": True, "deleted": deleted, "message": f"Deleted {deleted} records."})
 
 

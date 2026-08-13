@@ -172,11 +172,17 @@
 <div class="panel">
   <h2>Query Database</h2>
   <div class="query-form">
+    <select id="q-db">
+      <option value="boats">Boats</option>
+      <option value="carmax">CarMax</option>
+      <option value="carvana">Carvana</option>
+    </select>
     <input type="number" id="q-year" placeholder="Year">
     <input type="text" id="q-make" placeholder="Make">
-    <input type="text" id="q-class" placeholder="Class">
+    <input type="text" id="q-model" placeholder="Model">
     <input type="text" id="q-engine" placeholder="Engine">
-    <input type="text" id="q-hin" placeholder="HIN">
+    <input type="text" id="q-class" placeholder="Class / Trim">
+    <input type="text" id="q-hin" placeholder="HIN / VIN">
     <select id="q-source">
       <option value="">All Sources</option>
       <option value="BoatTrader">BoatTrader</option>
@@ -190,7 +196,6 @@
       <option value="scraped_at ASC">Oldest first</option>
       <option value="year DESC">Year (newest)</option>
       <option value="year ASC">Year (oldest)</option>
-      <option value="name ASC">Name (A-Z)</option>
     </select>
   </div>
   <div class="controls" style="margin-bottom:12px;">

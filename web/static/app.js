@@ -35,6 +35,8 @@ const els = {
   results: document.getElementById('results'),
   queryTotal: document.getElementById('query-total'),
   btnQuery: document.getElementById('btn-query'),
+  qDb: document.getElementById('q-db'),
+  qModel: document.getElementById('q-model'),
   scheduleSource: document.getElementById('schedule-source'),
   scheduleAction: document.getElementById('schedule-action'),
   scheduleMinutes: document.getElementById('schedule-minutes'),
@@ -604,10 +606,13 @@ async function deleteBoat(boatId, boatName) {
 // --- Query ---
 function buildQueryParams() {
   const p = new URLSearchParams();
+  p.set('db', els.qDb.value || 'boats');
   const year = document.getElementById('q-year').value;
   if (year) p.set('year', year);
   const make = document.getElementById('q-make').value;
   if (make) p.set('make', make);
+  const model = document.getElementById('q-model').value;
+  if (model) p.set('model', model);
   const cls = document.getElementById('q-class').value;
   if (cls) p.set('class', cls);
   const engine = document.getElementById('q-engine').value;
@@ -622,11 +627,13 @@ function buildQueryParams() {
 }
 
 function buildQueryFiltersJson() {
-  const filters = {};
+  const filters = { db: els.qDb.value || 'boats' };
   const year = document.getElementById('q-year').value;
   if (year) filters.year = parseInt(year, 10);
   const make = document.getElementById('q-make').value;
   if (make) filters.make = make;
+  const model = document.getElementById('q-model').value;
+  if (model) filters.model = model;
   const cls = document.getElementById('q-class').value;
   if (cls) filters.boat_class = cls;
   const engine = document.getElementById('q-engine').value;
@@ -638,37 +645,107 @@ function buildQueryFiltersJson() {
   return filters;
 }
 
+const DB_COLUMNS = {
+  boats: {
+    cols: ['year','make','model','length','class','engine','total_power','engine_hours','capacity','hin','name','source'],
+    labels: ['Year','Make','Model','Length','Class','Engine','Power','Hours','Capacity','HIN','Name','Source'],
+    nameField: 'name',
+  },
+  carmax: {
+    cols: ['vin','year','make','model','trim','exterior_color','engine','transmission','fuel_type','length','width','height','wheel_size','tire_size','interior_color','interior_trim','source_site','scraped_at'],
+    labels: ['VIN','Year','Make','Model','Trim','Ext. Color','Engine','Trans','Fuel','Length','Width','Height','Wheel','Tire','Int. Color','Int. Trim','Source','Scraped'],
+    nameField: 'vin',
+  },
+  carvana: {
+    cols: ['vin','year','make','model','trim','exterior_color','engine','transmission','fuel_type','length','width','height','wheel_size','tire_size','interior_color','interior_trim','source_site','scraped_at'],
+    labels: ['VIN','Year','Make','Model','Trim','Ext. Color','Engine','Trans','Fuel','Length','Width','Height','Wheel','Tire','Int. Color','Int. Trim','Source','Scraped'],
+    nameField: 'vin',
+  },
+};
+
+const DB_ORDER_OPTIONS = {
+  boats: [
+    {value:'scraped_at DESC', label:'Newest first'},
+    {value:'scraped_at ASC', label:'Oldest first'},
+    {value:'year DESC', label:'Year (newest)'},
+    {value:'year ASC', label:'Year (oldest)'},
+    {value:'name ASC', label:'Name (A-Z)'},
+  ],
+  carmax: [
+    {value:'scraped_at DESC', label:'Newest first'},
+    {value:'scraped_at ASC', label:'Oldest first'},
+    {value:'year DESC', label:'Year (newest)'},
+    {value:'year ASC', label:'Year (oldest)'},
+    {value:'vin ASC', label:'VIN (A-Z)'},
+  ],
+  carvana: [
+    {value:'scraped_at DESC', label:'Newest first'},
+    {value:'scraped_at ASC', label:'Oldest first'},
+    {value:'year DESC', label:'Year (newest)'},
+    {value:'year ASC', label:'Year (oldest)'},
+    {value:'vin ASC', label:'VIN (A-Z)'},
+  ],
+};
+
+function updateOrderOptions() {
+  const db = els.qDb.value || 'boats';
+  const sel = document.getElementById('q-order');
+  const current = sel.value;
+  sel.innerHTML = '';
+  for (const opt of DB_ORDER_OPTIONS[db] || DB_ORDER_OPTIONS.boats) {
+    const option = document.createElement('option');
+    option.value = opt.value;
+    option.textContent = opt.label;
+    sel.appendChild(option);
+  }
+  const stillValid = Array.from(sel.options).some(o => o.value === current);
+  sel.value = stillValid ? current : ((DB_ORDER_OPTIONS[db] || DB_ORDER_OPTIONS.boats)[0].value);
+}
+
 function renderResults(data) {
   if (!data.success) {
     els.results.innerHTML = `<div class="empty">Error: ${data.error}</div>`;
     els.btnDeleteAll.style.display = 'none';
+    if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = 'none';
     return;
   }
+  const db = data.db || 'boats';
+  const isBoats = db === 'boats';
   els.queryTotal.textContent = `Total: ${data.total} | Showing ${data.rows.length}`;
   if (data.rows.length === 0) {
     els.results.innerHTML = '<div class="empty">No results.</div>';
     els.btnDeleteAll.style.display = 'none';
+    if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = 'none';
     return;
   }
 
-  els.btnDeleteAll.style.display = 'inline-flex';
-  if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = 'inline-flex';
+  els.btnDeleteAll.style.display = isBoats ? 'inline-flex' : 'none';
+  if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = isBoats ? 'inline-flex' : 'none';
 
-  const cols = ['year','make','model','length','class','engine','total_power','engine_hours','capacity','hin','name','source'];
+  const cfg = DB_COLUMNS[db] || DB_COLUMNS.boats;
   let html = '<table><thead><tr>';
-  html += '<th>Year</th><th>Make</th><th>Model</th><th>Length</th><th>Class</th><th>Engine</th><th>Power</th><th>Hours</th><th>Capacity</th><th>HIN</th><th>Name</th><th>Source</th><th style="text-align:center;width:80px;">Actions</th>';
+  for (const label of cfg.labels) {
+    html += `<th>${label}</th>`;
+  }
+  if (isBoats) {
+    html += '<th style="text-align:center;width:80px;">Actions</th>';
+  }
   html += '</tr></thead><tbody>';
 
   for (const row of data.rows) {
     html += '<tr>';
-    for (const c of cols) {
+    for (const c of cfg.cols) {
       let val = row[c] ?? '';
-      html += `<td>${val}</td>`;
+      html += `<td>${(val + '').replace(/</g,'&lt;')}</td>`;
     }
-    html += `<td style="text-align:center;white-space:nowrap;">`;
-    html += `<button class="btn btn-primary" style="padding:4px 8px;font-size:.7rem;margin-right:4px;" onclick="boatApp.edit(${row.id})">Edit</button>`;
-    html += `<button class="btn btn-danger" style="padding:4px 8px;font-size:.7rem;" onclick="boatApp.del(${row.id},'${(row.name||'').replace(/'/g,"\\'")}')">Delete</button>`;
-    html += '</td></tr>';
+    if (isBoats) {
+      const name = (row[cfg.nameField] || '').replace(/'/g, "\\'");
+      html += `<td style="text-align:center;white-space:nowrap;">`;
+      html += `<button class="btn btn-primary" style="padding:4px 8px;font-size:.7rem;margin-right:4px;" onclick="boatApp.edit(${row.id})">Edit</button>`;
+      html += `<button class="btn btn-danger" style="padding:4px 8px;font-size:.7rem;" onclick="boatApp.del(${row.id},'${name}')">Delete</button>`;
+      html += '</td>';
+    }
+    html += '</tr>';
   }
   html += '</tbody></table>';
   els.results.innerHTML = html;
@@ -836,6 +913,15 @@ const boatApp = { edit: openEditModal, del: deleteBoat };
 if (typeof window !== 'undefined') window.boatApp = boatApp;
 
 if (els.btnQuery) els.btnQuery.addEventListener('click', runQuery);
+if (els.qDb) {
+  els.qDb.addEventListener('change', () => {
+    updateOrderOptions();
+    els.results.innerHTML = '<div class="empty">Select database changed. Click Run Query to load results.</div>';
+    els.btnDeleteAll.style.display = 'none';
+    if (els.btnDeleteMissingYear) els.btnDeleteMissingYear.style.display = 'none';
+  });
+}
+updateOrderOptions();
 
 if (els.btnDeleteAll) {
   els.btnDeleteAll.addEventListener('click', async () => {
